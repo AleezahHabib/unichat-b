@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+dist/
+wheels/
+*.egg-info/
+*.egg
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment Variables & Secrets (CRITICAL: Never commit real keys/tokens)
+.env
+.env.*
+!.env.example
+
+# Databases
+*.db
+*.sqlite3
+*.sqlite
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

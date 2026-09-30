@@ -1,0 +1,928 @@
+openapi: 3.0.3
+info:
+  title: UniChat API
+  version: 1.0.0
+  description: Unified team chat connected to Slack and Discord with Gemini AI assistance.
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /auth/signup:
+    post:
+      summary: Register a new user
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/login:
+    post:
+      summary: Log in with email and password
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /auth/me:
+    get:
+      summary: Get current authenticated user
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /workspaces:
+    get:
+      summary: List workspaces for current user
+      operationId: listWorkspaces
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of workspaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceResponse'
+    post:
+      summary: Create a new workspace
+      operationId: createWorkspace
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkspaceRequest'
+      responses:
+        '201':
+          description: Workspace created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceResponse'
+
+  /workspaces/{workspace_id}:
+    delete:
+      summary: Delete a workspace (Owner only)
+      operationId: deleteWorkspace
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Workspace deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /workspaces/{workspace_id}/members:
+    get:
+      summary: List members in workspace
+      operationId: listWorkspaceMembers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of workspace members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMemberResponse'
+
+  /workspaces/{workspace_id}/invites:
+    post:
+      summary: Create workspace invite link
+      operationId: createInvite
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Invite token generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInviteResponse'
+
+  /invites/{token}:
+    get:
+      summary: Preview invite details
+      operationId: getInvitePreview
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePreviewResponse'
+
+  /invites/{token}/accept:
+    post:
+      summary: Accept workspace invite
+      operationId: acceptInvite
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptInviteResponse'
+
+  /workspaces/{workspace_id}/channels:
+    get:
+      summary: List channels in a workspace
+      operationId: listChannels
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelResponse'
+    post:
+      summary: Create a new channel
+      operationId: createChannel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChannelRequest'
+      responses:
+        '201':
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelResponse'
+
+  /channels/{channel_id}/join:
+    post:
+      summary: Join a channel
+      operationId: joinChannel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Joined channel
+
+  /channels/{channel_id}/leave:
+    post:
+      summary: Leave a channel
+      operationId: leaveChannel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Left channel
+
+  /channels/{channel_id}/members:
+    get:
+      summary: List channel members
+      operationId: listChannelMembers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Channel members list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelMemberResponse'
+
+  /channels/{channel_id}/messages:
+    get:
+      summary: Get messages in a channel with cursor pagination
+      operationId: listMessages
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Paginated messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessagesPageResponse'
+    post:
+      summary: Post a message to a channel
+      operationId: createMessage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMessageRequest'
+      responses:
+        '201':
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /messages/{message_id}:
+    patch:
+      summary: Edit message
+      operationId: updateMessage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMessageRequest'
+      responses:
+        '200':
+          description: Message updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+    delete:
+      summary: Soft delete message
+      operationId: deleteMessage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Message deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /messages/{message_id}/thread:
+    get:
+      summary: Get thread replies for a message
+      operationId: getThread
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Message thread
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    ErrorResponse:
+      description: Standard error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDetail'
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - database
+        - redis
+        - ai
+        - background
+      properties:
+        status:
+          type: string
+          example: ok
+        database:
+          type: boolean
+          example: true
+        redis:
+          type: boolean
+          example: true
+        ai:
+          type: string
+          example: enabled
+        background:
+          type: string
+          example: "off"
+
+    ErrorDetail:
+      type: object
+      required:
+        - detail
+        - code
+      properties:
+        detail:
+          type: string
+        code:
+          type: string
+
+    UserResponse:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - avatar_color
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        avatar_color:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - user
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    WorkspaceResponse:
+      type: object
+      required:
+        - id
+        - name
+        - owner_id
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        member_count:
+          type: integer
+          example: 3
+
+    CreateWorkspaceRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+
+    WorkspaceMemberResponse:
+      type: object
+      required:
+        - id
+        - user_id
+        - name
+        - email
+        - avatar_color
+        - role
+        - joined_at
+        - online
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        avatar_color:
+          type: string
+        role:
+          type: string
+        joined_at:
+          type: string
+          format: date-time
+        online:
+          type: boolean
+
+    CreateInviteResponse:
+      type: object
+      required:
+        - id
+        - workspace_id
+        - token
+        - expires_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    InvitePreviewResponse:
+      type: object
+      required:
+        - workspace_name
+        - inviter_name
+        - expires_at
+        - is_expired
+      properties:
+        workspace_name:
+          type: string
+        inviter_name:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        is_expired:
+          type: boolean
+
+    AcceptInviteResponse:
+      type: object
+      required:
+        - workspace_id
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+
+    ChannelResponse:
+      type: object
+      required:
+        - id
+        - workspace_id
+        - name
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    CreateChannelRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    ChannelMemberResponse:
+      type: object
+      required:
+        - user_id
+        - name
+        - email
+        - avatar_color
+        - joined_at
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        avatar_color:
+          type: string
+        joined_at:
+          type: string
+          format: date-time
+
+    CreateMessageRequest:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    UpdateMessageRequest:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+
+    MessageAuthor:
+      type: object
+      required:
+        - name
+        - is_external
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        avatar_color:
+          type: string
+          nullable: true
+        is_external:
+          type: boolean
+
+    MessageResponse:
+      type: object
+      required:
+        - id
+        - channel_id
+        - author
+        - body
+        - source
+        - created_at
+        - is_deleted
+        - reply_count
+      properties:
+        id:
+          type: string
+          format: uuid
+        channel_id:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/MessageAuthor'
+        body:
+          type: string
+        source:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+        external_id:
+          type: string
+          nullable: true
+        external_channel_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_deleted:
+          type: boolean
+        reply_count:
+          type: integer
+        last_reply_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    MessagesPageResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageResponse'
+        next_cursor:
+          type: string
+          nullable: true
+
+    ThreadResponse:
+      type: object
+      required:
+        - parent
+        - replies
+      properties:
+        parent:
+          $ref: '#/components/schemas/MessageResponse'
+        replies:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageResponse'
+
+    ConnectedPlatformResponse:
+      type: object
+      required:
+        - id
+        - workspace_id
+        - platform
+        - display_name
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        bot_identity:
+          type: string
+          nullable: true
+        display_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ExternalChannel:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        group_name:
+          type: string
+          nullable: true
+
+    ChannelLinkResponse:
+      type: object
+      required:
+        - id
+        - channel_id
+        - platform_id
+        - platform
+        - external_channel_id
+        - external_channel_name
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        channel_id:
+          type: string
+          format: uuid
+        platform_id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        external_channel_id:
+          type: string
+        external_channel_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+

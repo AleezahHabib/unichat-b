@@ -16,4 +16,10 @@
 - [x] Create frontend `src/features/integrations/api.ts`
 - [x] Create components `ConnectCard.tsx`, `SetupGuide.tsx`, `LinkChannelModal.tsx`, `PlatformBadge.tsx`
 - [x] Create page `/workspace/[workspaceId]/settings/integrations/page.tsx`
-- [x] Verify `pytest tests/test_integrations.py`
+- [x] Implement `GET /integrations/slack/oauth/start` and `GET /integrations/slack/oauth/callback` (AC-05-09)
+- [x] Implement multi-workspace team_id event routing in `sync_external.py` (AC-05-10)
+- [x] Create public frontend `/privacy` and `/terms` pages and update footer with support contact
+- [x] Update frontend Integrations page with "Add to Slack" button and status handling
+- [x] Add tests in `tests/test_integrations.py` for AC-05-09 and AC-05-10
+- [x] Update `specs/api/openapi.yaml`, `AGENTS.md`, and regenerate frontend types
+

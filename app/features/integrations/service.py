@@ -1,12 +1,15 @@
 import json
 import logging
+import secrets
 from uuid import UUID
+import httpx
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.errors import AppError
 from app.core.security import decrypt_secret, encrypt_secret
 from app.features.authentication.repository import user_repository
@@ -33,6 +36,129 @@ logger = logging.getLogger(__name__)
 
 
 class IntegrationService:
+    async def start_slack_oauth(
+        self, db: AsyncSession, redis: Redis, workspace_id: UUID, user_id: UUID
+    ) -> str:
+        ws = await workspace_repository.get_workspace(db, workspace_id)
+        if not ws:
+            raise AppError("Workspace not found", code="workspace_not_found", status_code=404)
+        if ws.owner_id != user_id:
+            raise AppError("Only the workspace owner can connect integrations", code="forbidden", status_code=403)
+
+        if not settings.SLACK_CLIENT_ID or not settings.SLACK_CLIENT_SECRET:
+            raise AppError("Slack OAuth credentials are not configured on the server", code="oauth_not_configured", status_code=500)
+
+        state = secrets.token_urlsafe(32)
+        redis_key = f"unichat:oauth:slack:{state}"
+        payload = json.dumps({"user_id": str(user_id), "workspace_id": str(workspace_id)})
+        await redis.set(redis_key, payload, ex=600)
+
+        scopes = "channels:history,channels:read,channels:join,chat:write,chat:write.customize,users:read"
+        auth_url = (
+            f"https://slack.com/oauth/v2/authorize"
+            f"?client_id={settings.SLACK_CLIENT_ID}"
+            f"&scope={scopes}"
+            f"&redirect_uri={settings.SLACK_REDIRECT_URI}"
+            f"&state={state}"
+        )
+        return auth_url
+
+    async def handle_slack_oauth_callback(
+        self,
+        db: AsyncSession,
+        redis: Redis,
+        code: str | None,
+        state: str | None,
+        error: str | None = None,
+    ) -> str:
+        fallback_url = f"{settings.FRONTEND_URL.rstrip('/')}/workspaces"
+        if error:
+            logger.warning("Slack OAuth returned error: %s", error)
+            return f"{fallback_url}?error={error}"
+
+        if not state:
+            logger.warning("Slack OAuth callback missing state parameter")
+            return f"{fallback_url}?error=invalid_state"
+
+        redis_key = f"unichat:oauth:slack:{state}"
+        state_data_raw = await redis.get(redis_key)
+        if not state_data_raw:
+            logger.warning("Slack OAuth CSRF verification failed: state '%s' not found in Redis", state)
+            return f"{fallback_url}?error=csrf_rejected"
+
+        # State token is single-use: immediately delete it
+        await redis.delete(redis_key)
+
+        try:
+            state_data = json.loads(state_data_raw)
+            workspace_id = UUID(state_data["workspace_id"])
+        except Exception as e:
+            logger.error("Failed to parse OAuth state payload: %s", e)
+            return f"{fallback_url}?error=invalid_state_payload"
+
+        target_integrations_url = f"{settings.FRONTEND_URL.rstrip('/')}/workspace/{workspace_id}/settings/integrations"
+
+        if not code:
+            logger.warning("Slack OAuth callback missing authorization code")
+            return f"{target_integrations_url}?error=missing_code"
+
+        # Exchange authorization code for bot token
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as http_client:
+                resp = await http_client.post(
+                    "https://slack.com/api/oauth.v2.access",
+                    data={
+                        "client_id": settings.SLACK_CLIENT_ID,
+                        "client_secret": settings.SLACK_CLIENT_SECRET,
+                        "code": code,
+                        "redirect_uri": settings.SLACK_REDIRECT_URI,
+                    },
+                )
+                data = resp.json()
+        except Exception as e:
+            logger.error("Failed to communicate with Slack OAuth token endpoint: %s", e)
+            return f"{target_integrations_url}?error=slack_exchange_network_error"
+
+        if not data.get("ok"):
+            err_msg = data.get("error", "oauth_failed")
+            logger.warning("Slack OAuth exchange returned error: %s", err_msg)
+            return f"{target_integrations_url}?error={err_msg}"
+
+        bot_token = data.get("access_token")
+        bot_user_id = data.get("bot_user_id")
+        team = data.get("team") or {}
+        team_id = team.get("id")
+        team_name = team.get("name") or "Slack Workspace"
+        app_token = settings.SLACK_APP_TOKEN
+
+        tokens_json = json.dumps({
+            "bot_token": bot_token,
+            "app_token": app_token,
+            "team_id": team_id,
+        })
+        encrypted_tokens = encrypt_secret(tokens_json)
+
+        # Upsert into connected_platforms
+        existing_platform = await integration_repository.get_workspace_platform(db, workspace_id, "slack")
+        if existing_platform:
+            existing_platform.encrypted_tokens = encrypted_tokens
+            existing_platform.bot_identity = bot_user_id
+            existing_platform.display_name = team_name
+            await db.commit()
+            logger.info("Updated existing Slack integration for workspace %s (team_id=%s)", workspace_id, team_id)
+        else:
+            await integration_repository.create_platform(
+                db,
+                workspace_id=workspace_id,
+                platform="slack",
+                encrypted_tokens=encrypted_tokens,
+                bot_identity=bot_user_id,
+                display_name=team_name,
+            )
+            logger.info("Created new Slack integration via OAuth for workspace %s (team_id=%s)", workspace_id, team_id)
+
+        return f"{target_integrations_url}?slack=connected"
+
     async def connect_slack(
         self, db: AsyncSession, req: ConnectSlackRequest, user_id: UUID
     ) -> ConnectedPlatformResponse:
@@ -48,8 +174,17 @@ class IntegrationService:
         except ValueError as e:
             raise AppError(str(e), code="invalid_tokens", status_code=400)
 
-        tokens_json = json.dumps({"bot_token": req.bot_token, "app_token": req.app_token})
+        tokens_json = json.dumps({"bot_token": req.bot_token, "app_token": req.app_token, "team_id": bot_meta.get("team_id")})
         encrypted_tokens = encrypt_secret(tokens_json)
+
+        existing_platform = await integration_repository.get_workspace_platform(db, req.workspace_id, "slack")
+        if existing_platform:
+            existing_platform.encrypted_tokens = encrypted_tokens
+            existing_platform.bot_identity = bot_meta["bot_id"]
+            existing_platform.display_name = bot_meta["display_name"]
+            await db.commit()
+            await db.refresh(existing_platform)
+            return ConnectedPlatformResponse.model_validate(existing_platform)
 
         cp = await integration_repository.create_platform(
             db,
@@ -60,6 +195,7 @@ class IntegrationService:
             display_name=bot_meta["display_name"],
         )
         return ConnectedPlatformResponse.model_validate(cp)
+
 
     async def connect_discord(
         self, db: AsyncSession, req: ConnectDiscordRequest, user_id: UUID

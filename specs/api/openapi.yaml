@@ -451,6 +451,197 @@ paths:
               schema:
                 $ref: '#/components/schemas/ThreadResponse'
 
+  /integrations:
+    get:
+      summary: List connected integrations for workspace
+      operationId: listIntegrations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of connected integrations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConnectedPlatformResponse'
+
+  /integrations/slack/oauth/start:
+    get:
+      summary: Start Slack OAuth authorization flow
+      operationId: startSlackOAuth
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: workspace_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '302':
+          description: Redirect to Slack authorization URL
+
+  /integrations/slack/oauth/callback:
+    get:
+      summary: Slack OAuth callback handler
+      operationId: slackOAuthCallback
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to frontend integrations page with status
+
+  /integrations/slack/connect:
+    post:
+      summary: Connect Slack workspace integration manually
+      operationId: connectSlack
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectSlackRequest'
+      responses:
+        '201':
+          description: Slack integration connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectedPlatformResponse'
+
+  /integrations/discord/connect:
+    post:
+      summary: Connect Discord bot integration
+      operationId: connectDiscord
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectDiscordRequest'
+      responses:
+        '201':
+          description: Discord integration connected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectedPlatformResponse'
+
+  /integrations/{platform_id}:
+    delete:
+      summary: Disconnect platform integration
+      operationId: deleteIntegration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: platform_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Platform disconnected
+
+  /integrations/{platform_id}/external-channels:
+    get:
+      summary: List external channels available on connected platform
+      operationId: listExternalChannels
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: platform_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of external channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExternalChannel'
+
+  /channels/{channel_id}/link:
+    post:
+      summary: Link a UniChat channel to an external platform channel
+      operationId: linkChannel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkChannelRequest'
+      responses:
+        '201':
+          description: Channel linked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelLinkResponse'
+    delete:
+      summary: Unlink a channel from a platform
+      operationId: unlinkChannel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: platform
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Channel unlinked successfully
+
 components:
   securitySchemes:
     BearerAuth:
@@ -925,4 +1116,47 @@ components:
         created_at:
           type: string
           format: date-time
+
+    ConnectSlackRequest:
+      type: object
+      required:
+        - workspace_id
+        - bot_token
+        - app_token
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        bot_token:
+          type: string
+        app_token:
+          type: string
+
+    ConnectDiscordRequest:
+      type: object
+      required:
+        - workspace_id
+        - bot_token
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        bot_token:
+          type: string
+
+    LinkChannelRequest:
+      type: object
+      required:
+        - platform_id
+        - external_channel_id
+        - external_channel_name
+      properties:
+        platform_id:
+          type: string
+          format: uuid
+        external_channel_id:
+          type: string
+        external_channel_name:
+          type: string
+
 

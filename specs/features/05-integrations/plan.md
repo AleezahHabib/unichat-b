@@ -6,6 +6,8 @@
 | GET | `/integrations` | Bearer JWT | 200, 401 |
 | GET | `/workspaces/{workspace_id}/channel-links` | Bearer JWT | 200, 401, 403 |
 | GET | `/channels/{channel_id}/links` | Bearer JWT | 200, 401, 403 |
+| GET | `/integrations/slack/oauth/start` | Bearer JWT | 302, 401, 403, 404 |
+| GET | `/integrations/slack/oauth/callback` | None (OAuth redirect) | 302 |
 | POST | `/integrations/slack/connect` | Bearer JWT | 201, 400, 401, 403 |
 | POST | `/integrations/discord/connect` | Bearer JWT | 201, 400, 401, 403 |
 | DELETE | `/integrations/{id}` | Bearer JWT | 200, 401, 403, 404 |

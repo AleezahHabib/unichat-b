@@ -58,7 +58,7 @@ async def test_AC_02_02_list_workspaces_and_members(client: AsyncClient):
     assert m_resp.status_code == 200
     members = m_resp.json()
     assert len(members) == 1
-    assert members[0]["email"] == "member@example.com"
+    assert members[0]["email"] == user["email"]
     assert members[0]["role"] == "owner"
 
 
@@ -187,8 +187,8 @@ async def test_AC_02_03_invite_joins_as_member_not_owner(client: AsyncClient):
     members = members_resp.json()
     assert len(members) == 2
 
-    owner_entry = next(m for m in members if m["email"] == "teamowner@example.com")
-    invitee_entry = next(m for m in members if m["email"] == "teammate@example.com")
+    owner_entry = next(m for m in members if m["email"] == owner["email"])
+    invitee_entry = next(m for m in members if m["email"] == invitee["email"])
 
     assert owner_entry["role"] == "owner"
     assert invitee_entry["role"] == "member"

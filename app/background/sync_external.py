@@ -40,9 +40,9 @@ async def process_slack_event(
     client: SocketModeClient,
     web_client: AsyncWebClient,
     bot_id: str,
-    platform_id: UUID,
+    platform_id: UUID | None = None,
 ) -> None:
-    """Handles an incoming Socket Mode event from Slack."""
+    """Handles an incoming Socket Mode event from Slack with multi-workspace routing."""
     # Acknowledge the request immediately (within 3 seconds per AC-05-03)
     response = SocketModeResponse(envelope_id=req.envelope_id)
     await client.send_socket_mode_response(response)
@@ -66,11 +66,9 @@ async def process_slack_event(
     ts = event.get("ts")
     thread_ts = event.get("thread_ts")
     bot_event_id = event.get("bot_id")
-
-    # Layer 1 Echo Guard: Identity Filter (ignore messages from own bot identity)
-    if echo_guard.is_identity_echo(slack_user_id, bot_id) or echo_guard.is_identity_echo(bot_event_id, bot_id):
-        logger.debug("Layer 1 Echo Guard: Ignored message from own bot identity (%s)", bot_id)
-        return
+    
+    # Extract team_id from payload or event (AC-05-10: multi-workspace routing)
+    event_team_id = payload.get("team_id") or event.get("team") or payload.get("context_team_id")
 
     redis = get_redis_client()
 
@@ -80,21 +78,73 @@ async def process_slack_event(
         return
 
     async with async_session() as db:
-        # Find if this external channel is linked to a UniChat channel
+        # Multi-workspace routing: Find the matching ConnectedPlatform
+        stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "slack")
+        platforms = (await db.execute(stmt)).scalars().all()
+
+        target_platform: ConnectedPlatform | None = None
+        target_bot_token: str | None = None
+        target_bot_id: str | None = None
+
+        for p in platforms:
+            try:
+                tokens = json.loads(decrypt_secret(p.encrypted_tokens))
+                p_team_id = tokens.get("team_id")
+                if event_team_id and p_team_id == event_team_id:
+                    target_platform = p
+                    target_bot_token = tokens.get("bot_token")
+                    target_bot_id = p.bot_identity
+                    break
+                elif platform_id and p.id == platform_id:
+                    target_platform = p
+                    target_bot_token = tokens.get("bot_token")
+                    target_bot_id = p.bot_identity
+            except Exception:
+                continue
+
+        if not target_platform and platforms:
+            if len(platforms) == 1:
+                target_platform = platforms[0]
+                try:
+                    tokens = json.loads(decrypt_secret(target_platform.encrypted_tokens))
+                    target_bot_token = tokens.get("bot_token")
+                    target_bot_id = target_platform.bot_identity
+                except Exception:
+                    pass
+
+        if not target_platform:
+            logger.debug("No Slack connected platform matched for team_id %s", event_team_id)
+            return
+
+        # Layer 1 Echo Guard: Identity Filter
+        if echo_guard.is_identity_echo(slack_user_id, target_bot_id or "") or echo_guard.is_identity_echo(bot_event_id, target_bot_id or ""):
+            logger.debug("Layer 1 Echo Guard: Ignored message from own bot identity (%s)", target_bot_id)
+            return
+
+        # Find if this external channel is linked to a UniChat channel under THIS platform
         link_stmt = select(ChannelLink).where(
             ChannelLink.platform == "slack",
+            ChannelLink.platform_id == target_platform.id,
             ChannelLink.external_channel_id == external_channel_id,
         )
         link = (await db.execute(link_stmt)).scalar_one_or_none()
         if not link:
-            logger.debug("No UniChat channel linked to Slack channel %s", external_channel_id)
-            return
+            # Fallback by channel ID
+            link_stmt_fallback = select(ChannelLink).where(
+                ChannelLink.platform == "slack",
+                ChannelLink.external_channel_id == external_channel_id,
+            )
+            link = (await db.execute(link_stmt_fallback)).scalar_one_or_none()
+            if not link:
+                logger.debug("No UniChat channel linked to Slack channel %s for platform %s", external_channel_id, target_platform.id)
+                return
 
-        # Resolve author display name via users.info
+        # Resolve author display name via users.info using the target workspace's bot token
         author_name = "Slack User"
-        if slack_user_id:
+        if slack_user_id and target_bot_token:
             try:
-                user_info = await web_client.users_info(user=slack_user_id)
+                temp_client = AsyncWebClient(token=target_bot_token)
+                user_info = await temp_client.users_info(user=slack_user_id)
                 user_data = user_info.get("user", {})
                 author_name = (
                     user_data.get("real_name")
@@ -177,12 +227,16 @@ async def process_slack_event(
 
 
 
+
 async def start_slack_socket_mode_for_platform(platform: ConnectedPlatform) -> None:
     """Instantiates and starts a SocketModeClient for a Slack integration."""
     try:
         raw_tokens = json.loads(decrypt_secret(platform.encrypted_tokens))
-        bot_token = raw_tokens["bot_token"]
-        app_token = raw_tokens["app_token"]
+        bot_token = raw_tokens.get("bot_token")
+        app_token = raw_tokens.get("app_token") or settings.SLACK_APP_TOKEN
+        if not app_token or not bot_token:
+            logger.warning("Missing bot_token or app_token for Slack platform %s", platform.id)
+            return
 
         web_client = AsyncWebClient(token=bot_token)
         socket_client = SocketModeClient(app_token=app_token, web_client=web_client)
@@ -198,6 +252,7 @@ async def start_slack_socket_mode_for_platform(platform: ConnectedPlatform) -> N
         logger.info("Connected Slack Socket Mode listener for platform %s (%s)", platform.id, platform.display_name)
     except Exception as e:
         logger.error("Failed to connect Slack Socket Mode for platform %s: %s", platform.id, e)
+
 
 
 async def stop_slack_socket_mode_for_platform(platform_id: UUID) -> None:

@@ -160,3 +160,185 @@ async def test_AC_05_08_health_background_status(client: AsyncClient):
     data = res.json()
     assert "background" in data
     assert data["background"] in ("leader", "follower", "off")
+
+
+@pytest.mark.asyncio
+async def test_AC_05_09_slack_oauth_state_mismatch_rejected(client: AsyncClient):
+    # Missing or invalid state in callback -> 302 redirect with csrf_rejected error
+    res = await client.get(
+        "/integrations/slack/oauth/callback?code=some_code&state=nonexistent_state_12345",
+        follow_redirects=False,
+    )
+    assert res.status_code == 302
+    assert "error=csrf_rejected" in res.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_AC_05_09_slack_oauth_success_exchange_faked(
+    client: AsyncClient, fake_redis, db_session
+):
+    from urllib.parse import parse_qs, urlparse
+    from app.core.config import settings
+    from app.core.security import decrypt_secret
+    from app.features.integrations.repository import integration_repository
+    import json
+
+    owner, token = await create_user_and_login(client, "OAuth Owner", "oauth_owner@example.com")
+    h = {"Authorization": f"Bearer {token}"}
+    ws = (await client.post("/workspaces", json={"name": "OAuth WS"}, headers=h)).json()
+
+    with patch.object(settings, "SLACK_CLIENT_ID", "test_slack_client_id"), \
+         patch.object(settings, "SLACK_CLIENT_SECRET", "test_slack_client_secret"), \
+         patch.object(settings, "SLACK_APP_TOKEN", "xapp-test-app-token"):
+
+        # 1. Start OAuth
+        start_res = await client.get(
+            f"/integrations/slack/oauth/start?workspace_id={ws['id']}",
+            headers=h,
+            follow_redirects=False,
+        )
+        assert start_res.status_code == 302
+        redirect_url = start_res.headers["location"]
+        assert redirect_url.startswith("https://slack.com/oauth/v2/authorize")
+
+        parsed = urlparse(redirect_url)
+        params = parse_qs(parsed.query)
+        assert "state" in params
+        state = params["state"][0]
+        assert params["client_id"][0] == "test_slack_client_id"
+
+        # Verify state in Redis
+        raw_state = await fake_redis.get(f"unichat:oauth:slack:{state}")
+        assert raw_state is not None
+        assert ws["id"] in str(raw_state)
+
+        # 2. Callback with faked Slack token exchange
+        mock_slack_response = {
+            "ok": True,
+            "access_token": "xoxb-fake-oauth-bot-token",
+            "bot_user_id": "B_OAUTH_BOT",
+            "team": {
+                "id": "T_OAUTH_TEAM",
+                "name": "Acme Corp Slack",
+            },
+        }
+
+        mock_http_response = AsyncMock()
+        mock_http_response.json = lambda: mock_slack_response
+
+        with patch("httpx.AsyncClient.post", AsyncMock(return_value=mock_http_response)):
+            callback_res = await client.get(
+                f"/integrations/slack/oauth/callback?code=mock_code&state={state}",
+                follow_redirects=False,
+            )
+            assert callback_res.status_code == 302
+            assert "slack=connected" in callback_res.headers["location"]
+
+        # State should be deleted (single use)
+        assert await fake_redis.get(f"unichat:oauth:slack:{state}") is None
+
+        # Verify database record
+        platform = await integration_repository.get_workspace_platform(
+            db_session, uuid.UUID(ws["id"]), "slack"
+        )
+        assert platform is not None
+        assert platform.display_name == "Acme Corp Slack"
+        assert platform.bot_identity == "B_OAUTH_BOT"
+
+        tokens = json.loads(decrypt_secret(platform.encrypted_tokens))
+        assert tokens["bot_token"] == "xoxb-fake-oauth-bot-token"
+        assert tokens["team_id"] == "T_OAUTH_TEAM"
+        assert tokens["app_token"] == "xapp-test-app-token"
+
+
+@pytest.mark.asyncio
+async def test_AC_05_10_multi_workspace_team_id_routing(client: AsyncClient, fake_redis, db_session):
+    import json
+    from sqlalchemy import select
+    from app.core.security import encrypt_secret
+    from app.features.integrations.repository import integration_repository
+    from app.features.workspaces_and_channels.repository import workspace_repository
+    from app.background.sync_external import process_slack_event
+    from app.features.messaging.models import Message
+    from slack_sdk.socket_mode.request import SocketModeRequest
+
+    # Create two workspaces
+    u1, t1 = await create_user_and_login(client, "Team A User", "ta@example.com")
+    u2, t2 = await create_user_and_login(client, "Team B User", "tb@example.com")
+
+    ws_a = await workspace_repository.create_workspace(db_session, "Workspace A", u1["id"])
+    ws_b = await workspace_repository.create_workspace(db_session, "Workspace B", u2["id"])
+
+    ch_a = (await workspace_repository.list_workspace_channels(db_session, ws_a.id))[0]
+    ch_b = (await workspace_repository.list_workspace_channels(db_session, ws_b.id))[0]
+
+    # Create connected platforms for Team A and Team B
+    tokens_a = encrypt_secret(json.dumps({"bot_token": "xoxb-team-a", "team_id": "T_TEAM_A"}))
+    p_a = await integration_repository.create_platform(
+        db_session, ws_a.id, "slack", tokens_a, bot_identity="B_TEAM_A", display_name="Team A Slack"
+    )
+
+    tokens_b = encrypt_secret(json.dumps({"bot_token": "xoxb-team-b", "team_id": "T_TEAM_B"}))
+    p_b = await integration_repository.create_platform(
+        db_session, ws_b.id, "slack", tokens_b, bot_identity="B_TEAM_B", display_name="Team B Slack"
+    )
+
+    # Link channels
+    await integration_repository.create_channel_link(
+        db_session,
+        channel_id=ch_a.id,
+        platform_id=p_a.id,
+        platform="slack",
+        external_channel_id="C_TEAM_A_GENERAL",
+        external_channel_name="general-a",
+    )
+    await integration_repository.create_channel_link(
+        db_session,
+        channel_id=ch_b.id,
+        platform_id=p_b.id,
+        platform="slack",
+        external_channel_id="C_TEAM_B_GENERAL",
+        external_channel_name="general-b",
+    )
+
+    # Simulate incoming Socket Mode message for Team A
+    mock_socket_client = AsyncMock()
+    mock_web_client = AsyncMock()
+    mock_web_client.users_info = AsyncMock(
+        return_value={"user": {"name": "alice", "real_name": "Alice Smith"}}
+    )
+
+    req = SocketModeRequest(
+        type="events_api",
+        envelope_id="env_123",
+        payload={
+            "team_id": "T_TEAM_A",
+            "event": {
+                "type": "message",
+                "user": "U_ALICE",
+                "text": "Hello Team A!",
+                "channel": "C_TEAM_A_GENERAL",
+                "ts": "1690000000.000100",
+            },
+        },
+    )
+
+    with patch("app.background.sync_external.get_redis_client", return_value=fake_redis), \
+         patch("app.background.sync_external.async_session", return_value=db_session), \
+         patch("app.background.sync_external.enqueue_message_embedding"), \
+         patch("app.background.sync_external.AsyncWebClient", return_value=mock_web_client):
+        await process_slack_event(req, mock_socket_client, mock_web_client, bot_id="B_TEAM_A", platform_id=p_a.id)
+
+    # Verify message was routed to Workspace A's channel
+    stmt_a = select(Message).where(Message.channel_id == ch_a.id)
+    messages_a = (await db_session.execute(stmt_a)).scalars().all()
+    assert len(messages_a) == 1
+    assert messages_a[0].body == "Hello Team A!"
+    assert messages_a[0].source == "slack"
+    assert messages_a[0].external_author_name == "Alice Smith"
+
+    # Workspace B's channel should have 0 messages
+    stmt_b = select(Message).where(Message.channel_id == ch_b.id)
+    messages_b = (await db_session.execute(stmt_b)).scalars().all()
+    assert len(messages_b) == 0
+

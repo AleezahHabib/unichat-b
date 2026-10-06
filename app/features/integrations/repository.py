@@ -40,6 +40,17 @@ class IntegrationRepository:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_workspace_platform(
+        self, db: AsyncSession, workspace_id: UUID, platform: str
+    ) -> ConnectedPlatform | None:
+        stmt = select(ConnectedPlatform).where(
+            ConnectedPlatform.workspace_id == workspace_id,
+            ConnectedPlatform.platform == platform,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+
     async def delete_platform(self, db: AsyncSession, platform_id: UUID) -> None:
         stmt = delete(ConnectedPlatform).where(ConnectedPlatform.id == platform_id)
         await db.execute(stmt)

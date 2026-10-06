@@ -235,6 +235,7 @@ unichat/
         ├── app/
         │   ├── layout.tsx  globals.css  not-found.tsx
         │   ├── (marketing)/page.tsx          # landing page at "/"
+        │   ├── privacy/page.tsx  terms/page.tsx
         │   ├── (auth)/login/page.tsx  signup/page.tsx
         │   ├── invite/[token]/page.tsx
         │   └── (app)/
@@ -365,6 +366,8 @@ invite-preview.
 | `PATCH/DELETE /messages/{id}` | Author-only; UniChat-source only; soft delete |
 | `GET/POST /messages/{id}/thread` | Replies oldest-first |
 | `GET /integrations?workspace_id=` | Tokens never returned |
+| `GET /integrations/slack/oauth/start?workspace_id=` | Owner only; creates state in Redis, 302 redirect to Slack |
+| `GET /integrations/slack/oauth/callback?code=&state=` | Validates state, exchanges code, encrypts tokens, redirects |
 | `POST /integrations/slack/connect` (bot_token, app_token) | Owner only; validated via `auth.test` |
 | `POST /integrations/discord/connect` (bot_token) | Owner only; validated via `GET /users/@me` |
 | `DELETE /integrations/{id}` | Stops listener/poller, removes links |

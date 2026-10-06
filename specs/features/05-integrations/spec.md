@@ -40,3 +40,11 @@ Connect Slack and Discord to UniChat channels for seamless two-way message synch
 
 ### AC-05-08: Health endpoint reporting
 - `GET /health` reports `"background": "leader"`, `"follower"`, or `"off"` based on leader lock status.
+
+### AC-05-09: Slack OAuth authorization flow & CSRF protection
+- `GET /integrations/slack/oauth/start?workspace_id=...` builds the Slack authorize URL with required bot scopes (`channels:history,channels:read,channels:join,chat:write,chat:write.customize,users:read`), generates a cryptographically random `state` token, stores it in Redis with 10-minute TTL tied to the user and workspace, and redirects (`302`) to Slack.
+- `GET /integrations/slack/oauth/callback?code=&state=` verifies state against Redis (rejecting with redirect error if missing or mismatched for CSRF protection). Exchanges code via `oauth.v2.access`, extracts bot token (`xoxb-...`), `team.id`, `team.name`, and `bot_user_id`, stores them encrypted in `connected_platforms` alongside `SLACK_APP_TOKEN`, and redirects to frontend with `slack=connected` or `error=...`.
+
+### AC-05-10: Multi-workspace Socket Mode event routing
+- Socket Mode listener running under a shared `SLACK_APP_TOKEN` extracts `team_id` from incoming event envelopes, looks up the corresponding `connected_platforms` record for that specific Slack team, and routes inbound messages strictly to that workspace's linked channels without cross-workspace data leakage.
+

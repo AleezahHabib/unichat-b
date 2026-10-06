@@ -11,15 +11,21 @@ from app.core.security import decode_access_token
 
 async def get_current_user(
     authorization: str | None = Header(None),
+    token: str | None = None,
 ) -> dict[str, Any]:
-    if not authorization or not authorization.startswith("Bearer "):
+    raw_token = None
+    if authorization and authorization.startswith("Bearer "):
+        raw_token = authorization.split(" ", 1)[1]
+    elif token:
+        raw_token = token
+
+    if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = authorization.split(" ", 1)[1]
-    payload = decode_access_token(token)
+    payload = decode_access_token(raw_token)
     if not payload or "sub" not in payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

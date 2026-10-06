@@ -1,8 +1,11 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import RedirectResponse
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.redis import get_redis
 from app.core.deps import get_current_user, require_channel_member, require_workspace_member
 from app.features.integrations.schemas import (
     ChannelLinkResponse,
@@ -18,6 +21,40 @@ router = APIRouter(tags=["integrations"])
 
 
 @router.get(
+    "/integrations/slack/oauth/start",
+    summary="Start Slack OAuth authorization flow",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+)
+async def start_slack_oauth(
+    workspace_id: UUID = Query(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    user_id = UUID(current_user["sub"])
+    auth_url = await integration_service.start_slack_oauth(db, redis, workspace_id, user_id)
+    return RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get(
+    "/integrations/slack/oauth/callback",
+    summary="Handle Slack OAuth callback and redirect to frontend",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+)
+async def slack_oauth_callback(
+    code: str | None = Query(None),
+    state: str | None = Query(None),
+    error: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    redirect_url = await integration_service.handle_slack_oauth_callback(db, redis, code, state, error)
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get(
     "/integrations",
     response_model=list[ConnectedPlatformResponse],
     summary="List connected integrations for workspace",
@@ -28,6 +65,7 @@ async def list_integrations(
     db: AsyncSession = Depends(get_db),
 ) -> list[ConnectedPlatformResponse]:
     return await integration_service.list_workspace_integrations(db, workspace_id)
+
 
 
 @router.get(

@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     ENABLE_BACKGROUND: bool = True
     DISCORD_POLL_SECONDS: int = 3
     LOG_LEVEL: str = "INFO"
+    SLACK_CLIENT_ID: str = ""
+    SLACK_CLIENT_SECRET: str = ""
+    SLACK_REDIRECT_URI: str = "http://localhost:8000/integrations/slack/oauth/callback"
+    SLACK_APP_TOKEN: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

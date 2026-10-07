@@ -63,6 +63,38 @@ async def delete_workspace(
     return {"status": "ok"}
 
 
+@router.post(
+    "/workspaces/{workspace_id}/leave",
+    status_code=status.HTTP_200_OK,
+    summary="Leave a workspace (removes from workspace and all channels; owner cannot leave)",
+)
+async def leave_workspace(
+    workspace_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _: UUID = Depends(require_workspace_member),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    user_id = UUID(current_user["sub"])
+    await workspace_service.leave_workspace(db, workspace_id, user_id)
+    return {"message": "Successfully left workspace"}
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/members/{user_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Remove a member from a workspace (Owner only)",
+)
+async def remove_workspace_member(
+    workspace_id: UUID,
+    user_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _: UUID = Depends(require_workspace_member),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    caller_id = UUID(current_user["sub"])
+    await workspace_service.remove_member(db, workspace_id, caller_id, user_id)
+    return {"message": "Member removed successfully"}
+
 
 @router.get(
     "/workspaces/{workspace_id}/members",

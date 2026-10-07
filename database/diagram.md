@@ -117,6 +117,16 @@ erDiagram
         timestamptz created_at
     }
 
+
+    channel_user_clears {
+        uuid user_id PK,FK
+        uuid channel_id PK,FK
+        timestamptz cleared_at
+    }
+
+    users ||--o{ channel_user_clears : "clears channel history for"
+    channels ||--o{ channel_user_clears : "cleared by"
+
     assistant_chats {
         uuid id PK
         uuid user_id FK

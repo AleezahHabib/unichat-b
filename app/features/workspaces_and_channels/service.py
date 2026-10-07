@@ -75,6 +75,34 @@ class WorkspaceService:
             for m in members
         ]
 
+    async def leave_workspace(
+        self, db: AsyncSession, workspace_id: UUID, user_id: UUID
+    ) -> None:
+        ws = await workspace_repository.get_workspace(db, workspace_id)
+        if not ws:
+            raise AppError("Workspace not found", code="workspace_not_found", status_code=404)
+        if ws.owner_id == user_id:
+            raise AppError("Workspace owner cannot leave workspace", code="owner_cannot_leave", status_code=403)
+
+        await workspace_repository.remove_workspace_member_all_channels(db, workspace_id, user_id)
+
+    async def remove_member(
+        self, db: AsyncSession, workspace_id: UUID, current_user_id: UUID, target_user_id: UUID
+    ) -> None:
+        ws = await workspace_repository.get_workspace(db, workspace_id)
+        if not ws:
+            raise AppError("Workspace not found", code="workspace_not_found", status_code=404)
+        if ws.owner_id != current_user_id:
+            raise AppError("Only the workspace owner can remove members", code="forbidden", status_code=403)
+        if target_user_id == current_user_id:
+            raise AppError("Cannot remove workspace owner", code="cannot_remove_owner", status_code=400)
+
+        members = await workspace_repository.list_workspace_members(db, workspace_id)
+        if not any(m["user_id"] == target_user_id for m in members):
+            raise AppError("Member not found in workspace", code="member_not_found", status_code=404)
+
+        await workspace_repository.remove_workspace_member_all_channels(db, workspace_id, target_user_id)
+
     async def create_invite(
         self, db: AsyncSession, workspace_id: UUID, current_user_id: UUID
     ) -> CreateInviteResponse:

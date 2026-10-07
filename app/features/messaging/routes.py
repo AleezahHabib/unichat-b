@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, require_channel_member
 from app.core.redis import get_redis
 from app.features.messaging.schemas import (
+    ClearChannelResponse,
     CreateMessageRequest,
     MessageResponse,
     MessagesPageResponse,
@@ -27,11 +28,31 @@ async def get_channel_messages(
     channel_id: UUID,
     cursor: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
     _: UUID = Depends(require_channel_member),
     db: AsyncSession = Depends(get_db),
 ) -> MessagesPageResponse:
+    user_id = UUID(current_user["sub"])
     return await message_service.get_channel_messages(
-        db, channel_id=channel_id, limit=limit, cursor=cursor
+        db, channel_id=channel_id, limit=limit, cursor=cursor, user_id=user_id
+    )
+
+
+@router.post(
+    "/channels/{channel_id}/clear",
+    response_model=ClearChannelResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Clear channel history for the current user only",
+)
+async def clear_channel(
+    channel_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    _: UUID = Depends(require_channel_member),
+    db: AsyncSession = Depends(get_db),
+) -> ClearChannelResponse:
+    user_id = UUID(current_user["sub"])
+    return await message_service.clear_channel_for_user(
+        db, channel_id=channel_id, user_id=user_id
     )
 
 
@@ -101,5 +122,3 @@ async def delete_message(
     return await message_service.delete_message(
         db, redis, message_id=message_id, author_id=user_id
     )
-
-

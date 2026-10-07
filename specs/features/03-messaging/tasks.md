@@ -12,3 +12,6 @@
 - [x] Create components: `MessageList`, `MessageItem`, `MessageComposer`, `ThreadPanel`
 - [x] Create page `/workspace/[workspaceId]/channel/[channelId]/page.tsx`
 - [ ] Verify `pytest tests/test_messaging.py`
+
+- [x] Clear Chat For Me: `POST /channels/{id}/clear` (AC-03-07)
+- [x] Outbound Relay background task resilience (Slack/Discord non-blocking)

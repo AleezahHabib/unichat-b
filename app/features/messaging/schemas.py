@@ -43,3 +43,8 @@ class MessagesPageResponse(BaseModel):
 class ThreadResponse(BaseModel):
     parent: MessageResponse
     replies: list[MessageResponse]
+
+
+class ClearChannelResponse(BaseModel):
+    channel_id: UUID
+    cleared_at: datetime

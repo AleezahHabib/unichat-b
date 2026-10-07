@@ -1,8 +1,7 @@
 import pytest
 from httpx import AsyncClient
-
-
 import uuid
+
 
 async def create_user_and_login(client: AsyncClient, name: str, email: str | None = None) -> tuple[dict, str]:
     user_email = email or f"{name.lower().replace(' ', '_')}_{uuid.uuid4().hex[:6]}@example.com"
@@ -19,23 +18,26 @@ async def create_user_and_login(client: AsyncClient, name: str, email: str | Non
 
 
 @pytest.mark.asyncio
-async def test_AC_02_01_create_workspace_auto_general(client: AsyncClient):
-    user, token = await create_user_and_login(client, "Owner User", "owner@example.com")
-
+async def test_AC_02_01_create_workspace_auto_provisions_general_and_owner_membership(client: AsyncClient):
+    user, token = await create_user_and_login(client, "WS Creator", "creator@example.com")
     headers = {"Authorization": f"Bearer {token}"}
-    ws_resp = await client.post("/workspaces", json={"name": "Acme Corp"}, headers=headers)
-    assert ws_resp.status_code == 201
-    ws = ws_resp.json()
+
+    resp = await client.post(
+        "/workspaces",
+        json={"name": "Acme Corp"},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    ws = resp.json()
     assert ws["name"] == "Acme Corp"
     assert ws["owner_id"] == user["id"]
 
-    # Verify #general channel auto created
+    # Verify #general channel was created
     ch_resp = await client.get(f"/workspaces/{ws['id']}/channels", headers=headers)
     assert ch_resp.status_code == 200
     channels = ch_resp.json()
-    assert len(channels) >= 1
-    gen_ch = next(c for c in channels if c["name"] == "general")
-    assert gen_ch["workspace_id"] == ws["id"]
+    assert len(channels) == 1
+    assert channels[0]["name"] == "general"
 
 
 @pytest.mark.asyncio
@@ -230,3 +232,88 @@ async def test_AC_02_06_delete_workspace_owner_only(client: AsyncClient):
     ws_ids = [w["id"] for w in ws_list_resp.json()]
     assert ws_id not in ws_ids
 
+
+@pytest.mark.asyncio
+async def test_AC_02_07_leave_workspace_non_owner(client: AsyncClient):
+    owner, owner_token = await create_user_and_login(client, "Leave Owner", "lowner@example.com")
+    member, member_token = await create_user_and_login(client, "Leave Member", "lmember@example.com")
+
+    owner_h = {"Authorization": f"Bearer {owner_token}"}
+    member_h = {"Authorization": f"Bearer {member_token}"}
+
+    ws = (await client.post("/workspaces", json={"name": "Leave Test WS"}, headers=owner_h)).json()
+    ws_id = ws["id"]
+
+    # Member joins workspace
+    inv = (await client.post(f"/workspaces/{ws_id}/invites", headers=owner_h)).json()
+    await client.post(f"/invites/{inv['token']}/accept", headers=member_h)
+
+    # Owner creates channel and member joins it
+    ch = (await client.post(f"/workspaces/{ws_id}/channels", json={"name": "leave-chat"}, headers=owner_h)).json()
+    await client.post(f"/channels/{ch['id']}/join", headers=member_h)
+
+    # Owner attempts to leave -> 403 owner_cannot_leave
+    owner_leave = await client.post(f"/workspaces/{ws_id}/leave", headers=owner_h)
+    assert owner_leave.status_code == 403
+    assert owner_leave.json()["code"] == "owner_cannot_leave"
+
+    # Member leaves workspace -> 200
+    member_leave = await client.post(f"/workspaces/{ws_id}/leave", headers=member_h)
+    assert member_leave.status_code == 200
+    assert member_leave.json()["message"] == "Successfully left workspace"
+
+    # Member is no longer in workspace members list
+    members_resp = await client.get(f"/workspaces/{ws_id}/members", headers=owner_h)
+    assert members_resp.status_code == 200
+    member_ids = [m["user_id"] for m in members_resp.json()]
+    assert member["id"] not in member_ids
+
+    # Member can no longer access channel in that workspace -> 403
+    ch_access = await client.get(f"/channels/{ch['id']}/messages", headers=member_h)
+    assert ch_access.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_AC_02_08_remove_member_owner_only(client: AsyncClient):
+    owner, owner_token = await create_user_and_login(client, "Rem Owner", "remowner@example.com")
+    member1, member1_token = await create_user_and_login(client, "Rem Member 1", "rem1@example.com")
+    member2, member2_token = await create_user_and_login(client, "Rem Member 2", "rem2@example.com")
+
+    owner_h = {"Authorization": f"Bearer {owner_token}"}
+    m1_h = {"Authorization": f"Bearer {member1_token}"}
+    m2_h = {"Authorization": f"Bearer {member2_token}"}
+
+    ws = (await client.post("/workspaces", json={"name": "Remove Member WS"}, headers=owner_h)).json()
+    ws_id = ws["id"]
+
+    # Members join
+    inv = (await client.post(f"/workspaces/{ws_id}/invites", headers=owner_h)).json()
+    await client.post(f"/invites/{inv['token']}/accept", headers=m1_h)
+    await client.post(f"/invites/{inv['token']}/accept", headers=m2_h)
+
+    # Non-owner tries to remove another member -> 403 forbidden
+    non_owner_rem = await client.delete(f"/workspaces/{ws_id}/members/{member2['id']}", headers=m1_h)
+    assert non_owner_rem.status_code == 403
+    assert non_owner_rem.json()["code"] == "forbidden"
+
+    # Owner tries to remove themselves -> 400 cannot_remove_owner
+    self_rem = await client.delete(f"/workspaces/{ws_id}/members/{owner['id']}", headers=owner_h)
+    assert self_rem.status_code == 400
+    assert self_rem.json()["code"] == "cannot_remove_owner"
+
+    # Owner removes member 1 -> 200
+    rem_resp = await client.delete(f"/workspaces/{ws_id}/members/{member1['id']}", headers=owner_h)
+    assert rem_resp.status_code == 200
+    assert rem_resp.json()["message"] == "Member removed successfully"
+
+    # Verify member 1 is gone from members list
+    members_resp = await client.get(f"/workspaces/{ws_id}/members", headers=owner_h)
+    assert members_resp.status_code == 200
+    member_ids = [m["user_id"] for m in members_resp.json()]
+    assert member1["id"] not in member_ids
+    assert member2["id"] in member_ids
+
+    # Removing non-member -> 404
+    rem_again = await client.delete(f"/workspaces/{ws_id}/members/{member1['id']}", headers=owner_h)
+    assert rem_again.status_code == 404
+    assert rem_again.json()["code"] == "member_not_found"

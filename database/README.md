@@ -48,6 +48,14 @@ Any duplicate delivery attempt (e.g. from network retries, dual Socket Mode sock
 
 ## Table Specifications (in Plain English)
 
+### 12. `channel_user_clears`
+Tracks per-user clear timestamps for channels, allowing individual users to clear channel history locally without deleting messages or affecting other workspace members.
+- `user_id` (UUID, FK -> `users.id` ON DELETE CASCADE, Composite PK)
+- `channel_id` (UUID, FK -> `channels.id` ON DELETE CASCADE, Composite PK)
+- `cleared_at` (TIMESTAMPTZ): Timestamp of user's last chat clear for this channel. Messages created prior to this timestamp are omitted from the user's message stream.
+- *Index*: `idx_channel_user_clears_user_channel` on `(user_id, channel_id)`.
+
+
 ### 1. `users`
 Stores user authentication profiles and baseline settings.
 - `id` (UUID, Primary Key): Unique user identifier.

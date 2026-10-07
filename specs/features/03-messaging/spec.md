@@ -29,3 +29,11 @@ Core messaging capabilities including message creation, editing, soft deletion, 
 - `GET /messages/{id}/thread` returns parent message plus all replies in oldest-first order.
 - Replies increment `reply_count` on the parent message.
 
+
+### AC-03-07: Clear Chat for Me (Per-User Local Clear)
+- User can clear chat history for themselves in a channel (`POST /channels/{channel_id}/clear`).
+- Upserts timestamp in `channel_user_clears(user_id, channel_id, cleared_at)`.
+- Channel message list queries (`GET /channels/{channel_id}/messages`) for that user filter out messages where `created_at <= cleared_at`.
+- Messages remain intact in database; other members and owner see all messages unaffected.
+- No realtime event is broadcast to other users.
+- New messages sent after the clear appear normally for all users.

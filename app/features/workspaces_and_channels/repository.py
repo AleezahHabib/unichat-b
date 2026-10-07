@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
-from sqlalchemy import select, text, func
+from sqlalchemy import func, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.authentication.models import User
@@ -135,6 +135,25 @@ class WorkspaceRepository:
             if not existing_ch:
                 db.add(ChannelMember(channel_id=gen_channel.id, user_id=user_id))
 
+        await db.commit()
+
+    async def remove_workspace_member_all_channels(
+        self, db: AsyncSession, workspace_id: UUID, user_id: UUID
+    ) -> None:
+        # Delete from workspace_members
+        stmt_wm = delete(WorkspaceMember).where(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == user_id,
+        )
+        await db.execute(stmt_wm)
+
+        # Delete from channel_members for all channels in this workspace
+        ch_subquery = select(Channel.id).where(Channel.workspace_id == workspace_id)
+        stmt_cm = delete(ChannelMember).where(
+            ChannelMember.user_id == user_id,
+            ChannelMember.channel_id.in_(ch_subquery),
+        )
+        await db.execute(stmt_cm)
         await db.commit()
 
     async def create_channel(

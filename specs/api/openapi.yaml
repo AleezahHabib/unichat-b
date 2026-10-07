@@ -1,100 +1,156 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: UniChat API
+  description: UniChat unified communication platform API
   version: 1.0.0
-  description: Unified team chat connected to Slack and Discord with Gemini AI assistance.
-
 paths:
-  /health:
-    get:
-      summary: Health check
-      operationId: getHealth
-      responses:
-        '200':
-          description: Service health status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-
   /auth/signup:
     post:
-      summary: Register a new user
-      operationId: registerUser
+      tags:
+      - authentication
+      summary: Sign up a new user
+      operationId: signup_auth_signup_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterRequest'
+              $ref: '#/components/schemas/SignupRequest'
+        required: true
       responses:
         '201':
-          description: User registered successfully
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /auth/login:
     post:
-      summary: Log in with email and password
-      operationId: loginUser
+      tags:
+      - authentication
+      summary: Log in user
+      operationId: login_auth_login_post
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/LoginRequest'
+        required: true
       responses:
         '200':
-          description: Login successful
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /auth/me:
     get:
-      summary: Get current authenticated user
-      operationId: getCurrentUser
-      security:
-        - BearerAuth: []
+      tags:
+      - authentication
+      summary: Get current user profile
+      operationId: get_me_auth_me_get
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Current user profile
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /workspaces:
     get:
+      tags:
+      - workspaces_and_channels
       summary: List workspaces for current user
-      operationId: listWorkspaces
-      security:
-        - BearerAuth: []
+      operationId: list_workspaces_workspaces_get
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: List of workspaces
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/WorkspaceResponse'
+                title: Response List Workspaces Workspaces Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
+      tags:
+      - workspaces_and_channels
       summary: Create a new workspace
-      operationId: createWorkspace
-      security:
-        - BearerAuth: []
+      operationId: create_workspace_workspaces_post
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
@@ -103,159 +159,386 @@ paths:
               $ref: '#/components/schemas/CreateWorkspaceRequest'
       responses:
         '201':
-          description: Workspace created
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkspaceResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /workspaces/{workspace_id}:
     delete:
+      tags:
+      - workspaces_and_channels
       summary: Delete a workspace (Owner only)
-      operationId: deleteWorkspace
-      security:
-        - BearerAuth: []
+      operationId: delete_workspace_workspaces__workspace_id__delete
       parameters:
-        - name: workspace_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Workspace deleted successfully
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  status:
-                    type: string
-                    example: ok
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-        '403':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /workspaces/{workspace_id}/members:
-    get:
-      summary: List members in workspace
-      operationId: listWorkspaceMembers
-      security:
-        - BearerAuth: []
+                title: Response Delete Workspace Workspaces  Workspace Id  Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /workspaces/{workspace_id}/leave:
+    post:
+      tags:
+      - workspaces_and_channels
+      summary: Leave a workspace (removes from workspace and all channels; owner cannot
+        leave)
+      operationId: leave_workspace_workspaces__workspace_id__leave_post
       parameters:
-        - name: workspace_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: List of workspace members
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Response Leave Workspace Workspaces  Workspace Id  Leave Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /workspaces/{workspace_id}/members/{user_id}:
+    delete:
+      tags:
+      - workspaces_and_channels
+      summary: Remove a member from a workspace (Owner only)
+      operationId: remove_workspace_member_workspaces__workspace_id__members__user_id__delete
+      parameters:
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Response Remove Workspace Member Workspaces  Workspace Id  Members  User
+                  Id  Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /workspaces/{workspace_id}/members:
+    get:
+      tags:
+      - workspaces_and_channels
+      summary: List workspace members
+      operationId: list_workspace_members_workspaces__workspace_id__members_get
+      parameters:
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/WorkspaceMemberResponse'
-
+                title: Response List Workspace Members Workspaces  Workspace Id  Members
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /workspaces/{workspace_id}/invites:
     post:
-      summary: Create workspace invite link
-      operationId: createInvite
-      security:
-        - BearerAuth: []
+      tags:
+      - workspaces_and_channels
+      summary: Create a workspace invite link
+      operationId: create_invite_workspaces__workspace_id__invites_post
       parameters:
-        - name: workspace_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '201':
-          description: Invite token generated
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateInviteResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /invites/{token}:
     get:
-      summary: Preview invite details
-      operationId: getInvitePreview
+      tags:
+      - workspaces_and_channels
+      summary: Preview workspace invite link details
+      operationId: get_invite_preview_invites__token__get
       parameters:
-        - name: token
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
       responses:
         '200':
-          description: Invite details
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvitePreviewResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /invites/{token}/accept:
     post:
+      tags:
+      - workspaces_and_channels
       summary: Accept workspace invite
-      operationId: acceptInvite
-      security:
-        - BearerAuth: []
+      operationId: accept_invite_invites__token__accept_post
       parameters:
-        - name: token
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: token
+        in: path
+        required: true
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Invite accepted
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AcceptInviteResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /workspaces/{workspace_id}/channels:
     get:
-      summary: List channels in a workspace
-      operationId: listChannels
-      security:
-        - BearerAuth: []
+      tags:
+      - workspaces_and_channels
+      summary: List channels in workspace
+      operationId: list_workspace_channels_workspaces__workspace_id__channels_get
       parameters:
-        - name: workspace_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: List of channels
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ChannelResponse'
+                title: Response List Workspace Channels Workspaces  Workspace Id  Channels
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
-      summary: Create a new channel
-      operationId: createChannel
-      security:
-        - BearerAuth: []
+      tags:
+      - workspaces_and_channels
+      summary: Create a channel in workspace
+      operationId: create_channel_workspaces__workspace_id__channels_post
       parameters:
-        - name: workspace_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
@@ -264,112 +547,241 @@ paths:
               $ref: '#/components/schemas/CreateChannelRequest'
       responses:
         '201':
-          description: Channel created
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChannelResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /channels/{channel_id}/join:
     post:
+      tags:
+      - workspaces_and_channels
       summary: Join a channel
-      operationId: joinChannel
-      security:
-        - BearerAuth: []
+      operationId: join_channel_channels__channel_id__join_post
       parameters:
-        - name: channel_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Joined channel
-
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Response Join Channel Channels  Channel Id  Join Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /channels/{channel_id}/leave:
     post:
+      tags:
+      - workspaces_and_channels
       summary: Leave a channel
-      operationId: leaveChannel
-      security:
-        - BearerAuth: []
+      operationId: leave_channel_channels__channel_id__leave_post
       parameters:
-        - name: channel_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Left channel
-
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Response Leave Channel Channels  Channel Id  Leave Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /channels/{channel_id}/members:
     get:
+      tags:
+      - workspaces_and_channels
       summary: List channel members
-      operationId: listChannelMembers
-      security:
-        - BearerAuth: []
+      operationId: list_channel_members_channels__channel_id__members_get
       parameters:
-        - name: channel_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Channel members list
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ChannelMemberResponse'
-
+                title: Response List Channel Members Channels  Channel Id  Members
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /channels/{channel_id}/messages:
     get:
-      summary: Get messages in a channel with cursor pagination
-      operationId: listMessages
-      security:
-        - BearerAuth: []
+      tags:
+      - messaging
+      summary: List messages in a channel (cursor pagination)
+      operationId: get_channel_messages_channels__channel_id__messages_get
       parameters:
-        - name: channel_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: cursor
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 50
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Paginated messages
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessagesPageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
+      tags:
+      - messaging
       summary: Post a message to a channel
-      operationId: createMessage
-      security:
-        - BearerAuth: []
+      operationId: create_message_channels__channel_id__messages_post
       parameters:
-        - name: channel_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
@@ -378,25 +790,133 @@ paths:
               $ref: '#/components/schemas/CreateMessageRequest'
       responses:
         '201':
-          description: Message created
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /channels/{channel_id}/clear:
+    post:
+      tags:
+      - messaging
+      summary: Clear channel history for the current user only
+      operationId: clear_channel_channels__channel_id__clear_post
+      parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearChannelResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /messages/{message_id}/thread:
+    get:
+      tags:
+      - messaging
+      summary: Get thread replies for a message
+      operationId: get_thread_messages__message_id__thread_get
+      parameters:
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Message Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /messages/{message_id}:
     patch:
-      summary: Edit message
-      operationId: updateMessage
-      security:
-        - BearerAuth: []
+      tags:
+      - messaging
+      summary: Edit a message
+      operationId: update_message_messages__message_id__patch
       parameters:
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Message Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
@@ -405,122 +925,300 @@ paths:
               $ref: '#/components/schemas/UpdateMessageRequest'
       responses:
         '200':
-          description: Message updated
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
-      summary: Soft delete message
-      operationId: deleteMessage
-      security:
-        - BearerAuth: []
+      tags:
+      - messaging
+      summary: Soft delete a message
+      operationId: delete_message_messages__message_id__delete
       parameters:
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Message Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Message deleted
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
-
-  /messages/{message_id}/thread:
-    get:
-      summary: Get thread replies for a message
-      operationId: getThread
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Message thread
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ThreadResponse'
-
+                $ref: '#/components/schemas/HTTPValidationError'
+  /integrations/slack/oauth/start:
+    get:
+      tags:
+      - integrations
+      summary: Start Slack OAuth authorization flow
+      operationId: start_slack_oauth_integrations_slack_oauth_start_get
+      parameters:
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '302':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /integrations/slack/oauth/callback:
+    get:
+      tags:
+      - integrations
+      summary: Handle Slack OAuth callback and redirect to frontend
+      operationId: slack_oauth_callback_integrations_slack_oauth_callback_get
+      parameters:
+      - name: code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Code
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State
+      - name: error
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      responses:
+        '302':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /integrations:
     get:
+      tags:
+      - integrations
       summary: List connected integrations for workspace
-      operationId: listIntegrations
-      security:
-        - BearerAuth: []
+      operationId: list_integrations_integrations_get
       parameters:
-        - name: workspace_id
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: List of connected integrations
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ConnectedPlatformResponse'
-
-  /integrations/slack/oauth/start:
+                title: Response List Integrations Integrations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /workspaces/{workspace_id}/channel-links:
     get:
-      summary: Start Slack OAuth authorization flow
-      operationId: startSlackOAuth
-      security:
-        - BearerAuth: []
+      tags:
+      - integrations
+      summary: List channel links for a workspace
+      operationId: list_workspace_channel_links_workspaces__workspace_id__channel_links_get
       parameters:
-        - name: workspace_id
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: workspace_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
-        '302':
-          description: Redirect to Slack authorization URL
-
-  /integrations/slack/oauth/callback:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelLinkResponse'
+                title: Response List Workspace Channel Links Workspaces  Workspace
+                  Id  Channel Links Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /channels/{channel_id}/links:
     get:
-      summary: Slack OAuth callback handler
-      operationId: slackOAuthCallback
+      tags:
+      - integrations
+      summary: List links for a specific channel
+      operationId: get_channel_links_channels__channel_id__links_get
       parameters:
-        - name: code
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: state
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: error
-          in: query
-          required: false
-          schema:
-            type: string
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
-        '302':
-          description: Redirect to frontend integrations page with status
-
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChannelLinkResponse'
+                title: Response Get Channel Links Channels  Channel Id  Links Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /integrations/slack/connect:
     post:
-      summary: Connect Slack workspace integration manually
-      operationId: connectSlack
-      security:
-        - BearerAuth: []
+      tags:
+      - integrations
+      summary: Connect Slack workspace integration
+      operationId: connect_slack_integrations_slack_connect_post
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
@@ -529,18 +1227,40 @@ paths:
               $ref: '#/components/schemas/ConnectSlackRequest'
       responses:
         '201':
-          description: Slack integration connected
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConnectedPlatformResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /integrations/discord/connect:
     post:
+      tags:
+      - integrations
       summary: Connect Discord bot integration
-      operationId: connectDiscord
-      security:
-        - BearerAuth: []
+      operationId: connect_discord_integrations_discord_connect_post
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
@@ -549,65 +1269,138 @@ paths:
               $ref: '#/components/schemas/ConnectDiscordRequest'
       responses:
         '201':
-          description: Discord integration connected
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConnectedPlatformResponse'
-
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /integrations/{platform_id}:
     delete:
+      tags:
+      - integrations
       summary: Disconnect platform integration
-      operationId: deleteIntegration
-      security:
-        - BearerAuth: []
+      operationId: delete_integration_integrations__platform_id__delete
       parameters:
-        - name: platform_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: platform_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Platform Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Platform disconnected
-
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Response Delete Integration Integrations  Platform Id  Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /integrations/{platform_id}/external-channels:
     get:
-      summary: List external channels available on connected platform
-      operationId: listExternalChannels
-      security:
-        - BearerAuth: []
+      tags:
+      - integrations
+      summary: List channels available on connected platform
+      operationId: list_external_channels_integrations__platform_id__external_channels_get
       parameters:
-        - name: platform_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: platform_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Platform Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: List of external channels
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/ExternalChannel'
-
+                title: Response List External Channels Integrations  Platform Id  External
+                  Channels Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /channels/{channel_id}/link:
     post:
+      tags:
+      - integrations
       summary: Link a UniChat channel to an external platform channel
-      operationId: linkChannel
-      security:
-        - BearerAuth: []
+      operationId: link_channel_channels__channel_id__link_post
       parameters:
-        - name: channel_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       requestBody:
         required: true
         content:
@@ -616,547 +1409,1130 @@ paths:
               $ref: '#/components/schemas/LinkChannelRequest'
       responses:
         '201':
-          description: Channel linked successfully
+          description: Successful Response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChannelLinkResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
+      tags:
+      - integrations
       summary: Unlink a channel from a platform
-      operationId: unlinkChannel
-      security:
-        - BearerAuth: []
+      operationId: unlink_channel_channels__channel_id__link_delete
       parameters:
-        - name: channel_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: platform
-          in: query
-          required: true
-          schema:
-            type: string
+      - name: channel_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Channel Id
+      - name: platform
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Platform
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
       responses:
         '200':
-          description: Channel unlinked successfully
-
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Response Unlink Channel Channels  Channel Id  Link Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /assistant/chat:
+    post:
+      tags:
+      - ai_assistant
+      summary: Chat with Gemini AI assistant
+      operationId: chat_with_assistant_assistant_chat_post
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantChatRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantChatResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /assistant/history:
+    get:
+      tags:
+      - ai_assistant
+      summary: Get assistant chat session history
+      operationId: get_assistant_history_assistant_history_get
+      parameters:
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: session_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssistantChatResponse'
+                title: Response Get Assistant History Assistant History Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /assistant/summarize:
+    post:
+      tags:
+      - ai_assistant
+      summary: Summarize recent channel messages
+      operationId: summarize_channel_assistant_summarize_post
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummarizeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummarizeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /assistant/draft-reply:
+    post:
+      tags:
+      - ai_assistant
+      summary: Draft an AI response to a message
+      operationId: draft_reply_assistant_draft_reply_post
+      parameters:
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DraftReplyRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftReplyResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search:
+    get:
+      tags:
+      - ai_assistant
+      summary: Semantic vector search across workspace messages
+      operationId: search_messages_search_get
+      parameters:
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Workspace Id
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: token
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchResult'
+                title: Response Search Messages Search Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      summary: Health Check
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                title: Response Health Check Health Get
 components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
-  responses:
-    ErrorResponse:
-      description: Standard error response
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorDetail'
-
   schemas:
-    HealthResponse:
-      type: object
-      required:
-        - status
-        - database
-        - redis
-        - ai
-        - background
+    AcceptInviteResponse:
       properties:
-        status:
+        workspace_id:
           type: string
-          example: ok
-        database:
-          type: boolean
-          example: true
-        redis:
-          type: boolean
-          example: true
-        ai:
-          type: string
-          example: enabled
-        background:
-          type: string
-          example: "off"
-
-    ErrorDetail:
+          format: uuid
+          title: Workspace Id
       type: object
       required:
-        - detail
-        - code
+      - workspace_id
+      title: AcceptInviteResponse
+    AssistantChatRequest:
       properties:
-        detail:
+        workspace_id:
           type: string
-        code:
+          format: uuid
+          title: Workspace Id
+        session_id:
           type: string
-
-    UserResponse:
+          maxLength: 64
+          minLength: 1
+          title: Session Id
+        message:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Message
       type: object
       required:
-        - id
-        - name
-        - email
-        - avatar_color
-        - created_at
+      - workspace_id
+      - session_id
+      - message
+      title: AssistantChatRequest
+    AssistantChatResponse:
       properties:
         id:
           type: string
           format: uuid
-        name:
+          title: Id
+        session_id:
           type: string
-        email:
+          title: Session Id
+        role:
           type: string
-          format: email
-        avatar_color:
+          title: Role
+        content:
           type: string
+          title: Content
+        citations:
+          items:
+            $ref: '#/components/schemas/Citation'
+          type: array
+          title: Citations
+          default: []
         created_at:
           type: string
           format: date-time
-
-    RegisterRequest:
+          title: Created At
       type: object
       required:
-        - name
-        - email
-        - password
-      properties:
-        name:
-          type: string
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-
-    LoginRequest:
-      type: object
-      required:
-        - email
-        - password
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-
+      - id
+      - session_id
+      - role
+      - content
+      - created_at
+      title: AssistantChatResponse
     AuthResponse:
-      type: object
-      required:
-        - access_token
-        - token_type
-        - user
       properties:
         access_token:
           type: string
+          title: Access Token
         token_type:
           type: string
-          example: bearer
+          title: Token Type
+          default: bearer
         user:
           $ref: '#/components/schemas/UserResponse'
-
-    WorkspaceResponse:
       type: object
       required:
-        - id
-        - name
-        - owner_id
-        - created_at
+      - access_token
+      - user
+      title: AuthResponse
+    ChannelLinkResponse:
       properties:
         id:
           type: string
           format: uuid
-        name:
-          type: string
-        owner_id:
-          type: string
-          format: uuid
-        created_at:
-          type: string
-          format: date-time
-        member_count:
-          type: integer
-          example: 3
-
-    CreateWorkspaceRequest:
-      type: object
-      required:
-        - name
-      properties:
-        name:
-          type: string
-
-    WorkspaceMemberResponse:
-      type: object
-      required:
-        - id
-        - user_id
-        - name
-        - email
-        - avatar_color
-        - role
-        - joined_at
-        - online
-      properties:
-        id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        email:
-          type: string
-        avatar_color:
-          type: string
-        role:
-          type: string
-        joined_at:
-          type: string
-          format: date-time
-        online:
-          type: boolean
-
-    CreateInviteResponse:
-      type: object
-      required:
-        - id
-        - workspace_id
-        - token
-        - expires_at
-        - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        workspace_id:
-          type: string
-          format: uuid
-        token:
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-        created_at:
-          type: string
-          format: date-time
-
-    InvitePreviewResponse:
-      type: object
-      required:
-        - workspace_name
-        - inviter_name
-        - expires_at
-        - is_expired
-      properties:
-        workspace_name:
-          type: string
-        inviter_name:
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-        is_expired:
-          type: boolean
-
-    AcceptInviteResponse:
-      type: object
-      required:
-        - workspace_id
-      properties:
-        workspace_id:
-          type: string
-          format: uuid
-
-    ChannelResponse:
-      type: object
-      required:
-        - id
-        - workspace_id
-        - name
-        - created_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        workspace_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        created_by:
-          type: string
-          format: uuid
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-
-    CreateChannelRequest:
-      type: object
-      required:
-        - name
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-
-    ChannelMemberResponse:
-      type: object
-      required:
-        - user_id
-        - name
-        - email
-        - avatar_color
-        - joined_at
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        email:
-          type: string
-        avatar_color:
-          type: string
-        joined_at:
-          type: string
-          format: date-time
-
-    CreateMessageRequest:
-      type: object
-      required:
-        - body
-      properties:
-        body:
-          type: string
-        parent_id:
-          type: string
-          format: uuid
-          nullable: true
-
-    UpdateMessageRequest:
-      type: object
-      required:
-        - body
-      properties:
-        body:
-          type: string
-
-    MessageAuthor:
-      type: object
-      required:
-        - name
-        - is_external
-      properties:
-        id:
-          type: string
-          format: uuid
-          nullable: true
-        name:
-          type: string
-        avatar_color:
-          type: string
-          nullable: true
-        is_external:
-          type: boolean
-
-    MessageResponse:
-      type: object
-      required:
-        - id
-        - channel_id
-        - author
-        - body
-        - source
-        - created_at
-        - is_deleted
-        - reply_count
-      properties:
-        id:
-          type: string
-          format: uuid
+          title: Id
         channel_id:
           type: string
           format: uuid
+          title: Channel Id
+        platform_id:
+          type: string
+          format: uuid
+          title: Platform Id
+        platform:
+          type: string
+          title: Platform
+        external_channel_id:
+          type: string
+          title: External Channel Id
+        external_channel_name:
+          type: string
+          title: External Channel Name
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - channel_id
+      - platform_id
+      - platform
+      - external_channel_id
+      - external_channel_name
+      - created_at
+      title: ChannelLinkResponse
+    ChannelMemberResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        name:
+          type: string
+          title: Name
+        email:
+          type: string
+          title: Email
+        avatar_color:
+          type: string
+          title: Avatar Color
+        joined_at:
+          type: string
+          format: date-time
+          title: Joined At
+      type: object
+      required:
+      - user_id
+      - name
+      - email
+      - avatar_color
+      - joined_at
+      title: ChannelMemberResponse
+    ChannelResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        workspace_id:
+          type: string
+          format: uuid
+          title: Workspace Id
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        created_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Created By
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - workspace_id
+      - name
+      - created_at
+      title: ChannelResponse
+    Citation:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        author_name:
+          type: string
+          title: Author Name
+        channel_name:
+          type: string
+          title: Channel Name
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        snippet:
+          type: string
+          title: Snippet
+      type: object
+      required:
+      - message_id
+      - author_name
+      - channel_name
+      - created_at
+      - snippet
+      title: Citation
+    ClearChannelResponse:
+      properties:
+        channel_id:
+          type: string
+          format: uuid
+          title: Channel Id
+        cleared_at:
+          type: string
+          format: date-time
+          title: Cleared At
+      type: object
+      required:
+      - channel_id
+      - cleared_at
+      title: ClearChannelResponse
+    ConnectDiscordRequest:
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+          title: Workspace Id
+        bot_token:
+          type: string
+          minLength: 1
+          title: Bot Token
+      type: object
+      required:
+      - workspace_id
+      - bot_token
+      title: ConnectDiscordRequest
+    ConnectSlackRequest:
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+          title: Workspace Id
+        bot_token:
+          type: string
+          minLength: 1
+          title: Bot Token
+        app_token:
+          type: string
+          minLength: 1
+          title: App Token
+      type: object
+      required:
+      - workspace_id
+      - bot_token
+      - app_token
+      title: ConnectSlackRequest
+    ConnectedPlatformResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        workspace_id:
+          type: string
+          format: uuid
+          title: Workspace Id
+        platform:
+          type: string
+          title: Platform
+        bot_identity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bot Identity
+        display_name:
+          type: string
+          title: Display Name
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - workspace_id
+      - platform
+      - display_name
+      - created_at
+      title: ConnectedPlatformResponse
+    CreateChannelRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+      type: object
+      required:
+      - name
+      title: CreateChannelRequest
+    CreateInviteResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        workspace_id:
+          type: string
+          format: uuid
+          title: Workspace Id
+        token:
+          type: string
+          title: Token
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - workspace_id
+      - token
+      - expires_at
+      - created_at
+      title: CreateInviteResponse
+    CreateMessageRequest:
+      properties:
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+        parent_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Parent Id
+      type: object
+      required:
+      - body
+      title: CreateMessageRequest
+    CreateWorkspaceRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+      type: object
+      required:
+      - name
+      title: CreateWorkspaceRequest
+    DraftReplyRequest:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+      type: object
+      required:
+      - message_id
+      title: DraftReplyRequest
+    DraftReplyResponse:
+      properties:
+        draft:
+          type: string
+          title: Draft
+      type: object
+      required:
+      - draft
+      title: DraftReplyResponse
+    ExternalChannel:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        group_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Name
+      type: object
+      required:
+      - id
+      - name
+      title: ExternalChannel
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    InvitePreviewResponse:
+      properties:
+        workspace_name:
+          type: string
+          title: Workspace Name
+        inviter_name:
+          type: string
+          title: Inviter Name
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        is_expired:
+          type: boolean
+          title: Is Expired
+      type: object
+      required:
+      - workspace_name
+      - inviter_name
+      - expires_at
+      - is_expired
+      title: InvitePreviewResponse
+    LinkChannelRequest:
+      properties:
+        platform_id:
+          type: string
+          format: uuid
+          title: Platform Id
+        external_channel_id:
+          type: string
+          title: External Channel Id
+        external_channel_name:
+          type: string
+          title: External Channel Name
+      type: object
+      required:
+      - platform_id
+      - external_channel_id
+      - external_channel_name
+      title: LinkChannelRequest
+    LoginRequest:
+      properties:
+        email:
+          type: string
+          format: email
+          title: Email
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+      - email
+      - password
+      title: LoginRequest
+    MessageAuthor:
+      properties:
+        id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Id
+        name:
+          type: string
+          title: Name
+        avatar_color:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Avatar Color
+        is_external:
+          type: boolean
+          title: Is External
+          default: false
+      type: object
+      required:
+      - name
+      title: MessageAuthor
+    MessageResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        channel_id:
+          type: string
+          format: uuid
+          title: Channel Id
         author:
           $ref: '#/components/schemas/MessageAuthor'
         body:
           type: string
+          title: Body
         source:
           type: string
+          title: Source
         parent_id:
-          type: string
-          format: uuid
-          nullable: true
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Parent Id
         external_id:
-          type: string
-          nullable: true
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Id
         external_channel_id:
-          type: string
-          nullable: true
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Channel Id
         created_at:
           type: string
           format: date-time
+          title: Created At
         edited_at:
-          type: string
-          format: date-time
-          nullable: true
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Edited At
         is_deleted:
           type: boolean
+          title: Is Deleted
+          default: false
         reply_count:
           type: integer
+          title: Reply Count
+          default: 0
         last_reply_at:
-          type: string
-          format: date-time
-          nullable: true
-
-    MessagesPageResponse:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Reply At
       type: object
       required:
-        - items
+      - id
+      - channel_id
+      - author
+      - body
+      - source
+      - created_at
+      title: MessageResponse
+    MessagesPageResponse:
       properties:
         items:
-          type: array
           items:
             $ref: '#/components/schemas/MessageResponse'
+          type: array
+          title: Items
         next_cursor:
-          type: string
-          nullable: true
-
-    ThreadResponse:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
       type: object
       required:
-        - parent
-        - replies
+      - items
+      title: MessagesPageResponse
+    SearchResult:
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          title: Message Id
+        channel_id:
+          type: string
+          format: uuid
+          title: Channel Id
+        channel_name:
+          type: string
+          title: Channel Name
+        author_name:
+          type: string
+          title: Author Name
+        body:
+          type: string
+          title: Body
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        score:
+          type: number
+          title: Score
+          default: 1.0
+        is_semantic:
+          type: boolean
+          title: Is Semantic
+          default: false
+      type: object
+      required:
+      - message_id
+      - channel_id
+      - channel_name
+      - author_name
+      - body
+      - created_at
+      title: SearchResult
+    SignupRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Name
+        email:
+          type: string
+          format: email
+          title: Email
+        password:
+          type: string
+          minLength: 8
+          title: Password
+      type: object
+      required:
+      - name
+      - email
+      - password
+      title: SignupRequest
+    SummarizeRequest:
+      properties:
+        channel_id:
+          type: string
+          format: uuid
+          title: Channel Id
+        since_hours:
+          type: integer
+          maximum: 168.0
+          minimum: 1.0
+          title: Since Hours
+          default: 24
+      type: object
+      required:
+      - channel_id
+      title: SummarizeRequest
+    SummarizeResponse:
+      properties:
+        summary:
+          type: string
+          title: Summary
+        key_decisions:
+          items:
+            type: string
+          type: array
+          title: Key Decisions
+          default: []
+        action_items:
+          items:
+            type: string
+          type: array
+          title: Action Items
+          default: []
+        message_count:
+          type: integer
+          title: Message Count
+      type: object
+      required:
+      - summary
+      - message_count
+      title: SummarizeResponse
+    ThreadResponse:
       properties:
         parent:
           $ref: '#/components/schemas/MessageResponse'
         replies:
-          type: array
           items:
             $ref: '#/components/schemas/MessageResponse'
-
-    ConnectedPlatformResponse:
+          type: array
+          title: Replies
       type: object
       required:
-        - id
-        - workspace_id
-        - platform
-        - display_name
-        - created_at
+      - parent
+      - replies
+      title: ThreadResponse
+    UpdateMessageRequest:
+      properties:
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+      type: object
+      required:
+      - body
+      title: UpdateMessageRequest
+    UserResponse:
       properties:
         id:
           type: string
           format: uuid
-        workspace_id:
-          type: string
-          format: uuid
-        platform:
-          type: string
-        bot_identity:
-          type: string
-          nullable: true
-        display_name:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-
-    ExternalChannel:
-      type: object
-      required:
-        - id
-        - name
-      properties:
-        id:
-          type: string
+          title: Id
         name:
           type: string
-        group_name:
+          title: Name
+        email:
           type: string
-          nullable: true
-
-    ChannelLinkResponse:
+          format: email
+          title: Email
+        avatar_color:
+          type: string
+          title: Avatar Color
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
       type: object
       required:
-        - id
-        - channel_id
-        - platform_id
-        - platform
-        - external_channel_id
-        - external_channel_name
-        - created_at
+      - id
+      - name
+      - email
+      - avatar_color
+      - created_at
+      title: UserResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WorkspaceMemberResponse:
       properties:
         id:
           type: string
           format: uuid
-        channel_id:
+          title: Id
+        user_id:
           type: string
           format: uuid
-        platform_id:
+          title: User Id
+        name:
+          type: string
+          title: Name
+        email:
+          type: string
+          title: Email
+        avatar_color:
+          type: string
+          title: Avatar Color
+        role:
+          type: string
+          title: Role
+        joined_at:
+          type: string
+          format: date-time
+          title: Joined At
+        online:
+          type: boolean
+          title: Online
+          default: false
+      type: object
+      required:
+      - id
+      - user_id
+      - name
+      - email
+      - avatar_color
+      - role
+      - joined_at
+      title: WorkspaceMemberResponse
+    WorkspaceResponse:
+      properties:
+        id:
           type: string
           format: uuid
-        platform:
+          title: Id
+        name:
           type: string
-        external_channel_id:
+          title: Name
+        owner_id:
           type: string
-        external_channel_name:
-          type: string
+          format: uuid
+          title: Owner Id
         created_at:
           type: string
           format: date-time
-
-    ConnectSlackRequest:
+          title: Created At
+        member_count:
+          type: integer
+          title: Member Count
+          default: 1
       type: object
       required:
-        - workspace_id
-        - bot_token
-        - app_token
-      properties:
-        workspace_id:
-          type: string
-          format: uuid
-        bot_token:
-          type: string
-        app_token:
-          type: string
-
-    ConnectDiscordRequest:
-      type: object
-      required:
-        - workspace_id
-        - bot_token
-      properties:
-        workspace_id:
-          type: string
-          format: uuid
-        bot_token:
-          type: string
-
-    LinkChannelRequest:
-      type: object
-      required:
-        - platform_id
-        - external_channel_id
-        - external_channel_name
-      properties:
-        platform_id:
-          type: string
-          format: uuid
-        external_channel_id:
-          type: string
-        external_channel_name:
-          type: string
-
-
+      - id
+      - name
+      - owner_id
+      - created_at
+      title: WorkspaceResponse

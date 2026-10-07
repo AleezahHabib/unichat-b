@@ -6,6 +6,8 @@
 | GET | `/workspaces` | Bearer JWT | 200, 401 |
 | POST | `/workspaces` | Bearer JWT | 201, 400, 401 |
 | DELETE | `/workspaces/{id}` | Bearer JWT | 200, 401, 403, 404 |
+| POST | `/workspaces/{id}/leave` | Bearer JWT | 200, 401, 403, 404 |
+| DELETE | `/workspaces/{id}/members/{user_id}` | Bearer JWT | 200, 400, 401, 403, 404 |
 | GET | `/workspaces/{id}/members` | Bearer JWT | 200, 401, 403 |
 | POST | `/workspaces/{id}/invites` | Bearer JWT | 201, 401, 403 |
 | GET | `/invites/{token}` | None | 200, 404 |

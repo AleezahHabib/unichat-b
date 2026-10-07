@@ -307,7 +307,7 @@ Fonts come from npm packages, never Google Fonts at build time.
 
 ---
 
-## 8. Database schema (11 tables) — ground truth
+## 8. Database schema (12 tables) — ground truth
 
 The SQL migrations are the source of truth; SQLAlchemy models mirror them.
 A schema change is always a **new** migration file (never edit an applied
@@ -337,12 +337,14 @@ message_embeddings(message_id PK→messages, embedding vector(768), model,
   created_at) — HNSW index, vector_cosine_ops
 assistant_chats(id, user_id, workspace_id, session_id, role user|assistant,
   content, citations JSONB, created_at)
+channel_user_clears(user_id→users, channel_id→channels, cleared_at,
+  PRIMARY KEY(user_id, channel_id))
 ```
 
 Migration files, in order: `001_enable_pgvector.sql` (extensions vector,
 pgcrypto), `002_users_and_workspaces.sql`, `003_channels_and_messages.sql`,
 `004_integrations.sql`, `005_ai_assistant.sql`, `006_multiple_channel_links.sql`,
-`007_restore_single_channel_links.sql`.
+`007_restore_single_channel_links.sql`, `008_channel_user_clears.sql`.
 
 ---
 
@@ -358,12 +360,15 @@ invite-preview.
 | `GET/POST /workspaces` | Creating makes `#general` + creator is owner+member |
 | `GET /workspaces/{id}/members` | `online` from Redis presence |
 | `POST /workspaces/{id}/invites` | Owner only; 7-day expiry |
+| `POST /workspaces/{id}/leave` | Removes user from workspace & all channels; owner cannot leave (403) |
+| `DELETE /workspaces/{id}/members/{user_id}` | Owner only; removes member from workspace & all channels |
 | `GET /invites/{token}` / `POST /invites/{token}/accept` | No auth on GET; accept is idempotent |
 | `GET/POST /workspaces/{id}/channels` | Name normalized, unique per workspace |
 | `POST /channels/{id}/join` / `leave` | Can't leave `#general` |
 | `GET /channels/{id}/members` | |
 | `GET/POST /channels/{id}/messages` | Cursor pagination, 50/page, newest first; 30/min/user → 429 `rate_limited` |
 | `PATCH/DELETE /messages/{id}` | Author-only; UniChat-source only; soft delete |
+| `POST /channels/{id}/clear` | Hides channel message history for current user only (purely local) |
 | `GET/POST /messages/{id}/thread` | Replies oldest-first |
 | `GET /integrations?workspace_id=` | Tokens never returned |
 | `GET /integrations/slack/oauth/start?workspace_id=` | Owner only; creates state in Redis, 302 redirect to Slack |

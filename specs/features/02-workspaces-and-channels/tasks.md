@@ -15,3 +15,6 @@
 - [x] Verify invite acceptance explicitly joins as role `member`
 - [ ] Verify `pytest tests/test_workspaces_and_channels.py`
 
+
+- [x] Leave Workspace: `POST /workspaces/{id}/leave` (AC-02-07)
+- [x] Remove Member: `DELETE /workspaces/{id}/members/{user_id}` (AC-02-08)

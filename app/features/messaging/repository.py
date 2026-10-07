@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from uuid import UUID
 from sqlalchemy import func, select, and_, or_, delete
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
 from app.features.authentication.models import User
-from app.features.messaging.models import Message
+from app.features.messaging.models import Message, ChannelUserClear
 
 
 class MessageRepository:
@@ -34,12 +35,38 @@ class MessageRepository:
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_user_cleared_at(
+        self, db: AsyncSession, user_id: UUID, channel_id: UUID
+    ) -> datetime | None:
+        stmt = select(ChannelUserClear.cleared_at).where(
+            ChannelUserClear.user_id == user_id, ChannelUserClear.channel_id == channel_id
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def upsert_user_cleared_at(
+        self, db: AsyncSession, user_id: UUID, channel_id: UUID
+    ) -> datetime:
+        now = datetime.now(timezone.utc)
+        stmt = (
+            insert(ChannelUserClear)
+            .values(user_id=user_id, channel_id=channel_id, cleared_at=now)
+            .on_conflict_do_update(
+                index_elements=["user_id", "channel_id"],
+                set_={"cleared_at": now},
+            )
+        )
+        await db.execute(stmt)
+        await db.commit()
+        return now
+
     async def get_channel_messages(
         self,
         db: AsyncSession,
         channel_id: UUID,
         limit: int = 50,
         cursor: str | None = None,
+        user_id: UUID | None = None,
     ) -> tuple[list[dict], str | None]:
         # Subquery for reply counts and last reply time
         reply_sub = (
@@ -65,6 +92,12 @@ class MessageRepository:
             .outerjoin(reply_sub, Message.id == reply_sub.c.parent_id)
             .where(Message.channel_id == channel_id, Message.parent_id.is_(None))
         )
+
+        # Per-user clear chat filter
+        if user_id:
+            cleared_at = await self.get_user_cleared_at(db, user_id, channel_id)
+            if cleared_at:
+                query = query.where(Message.created_at > cleared_at)
 
         if cursor:
             # Parse cursor (timestamp_iso|id)
@@ -169,4 +202,3 @@ class MessageRepository:
 
 
 message_repository = MessageRepository()
-

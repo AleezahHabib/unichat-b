@@ -1,8 +1,7 @@
 import pytest
 from httpx import AsyncClient
-
-
 import uuid
+
 
 async def create_user_and_login(client: AsyncClient, name: str, email: str | None = None) -> tuple[dict, str]:
     user_email = email or f"{name.lower().replace(' ', '_')}_{uuid.uuid4().hex[:6]}@example.com"
@@ -152,3 +151,60 @@ async def test_AC_03_04_threads_parent_and_replies(client: AsyncClient):
     assert thread["replies"][1]["body"] == "Reply 2"
 
 
+@pytest.mark.asyncio
+async def test_AC_03_07_clear_chat_for_me_per_user(client: AsyncClient):
+    user1, token1 = await create_user_and_login(client, "Clear User 1", "c1@example.com")
+    user2, token2 = await create_user_and_login(client, "Clear User 2", "c2@example.com")
+
+    h1 = {"Authorization": f"Bearer {token1}"}
+    h2 = {"Authorization": f"Bearer {token2}"}
+
+    ws = (await client.post("/workspaces", json={"name": "Clear Chat WS"}, headers=h1)).json()
+    ws_id = ws["id"]
+
+    # User 2 joins workspace
+    inv = (await client.post(f"/workspaces/{ws_id}/invites", headers=h1)).json()
+    await client.post(f"/invites/{inv['token']}/accept", headers=h2)
+
+    channels = (await client.get(f"/workspaces/{ws_id}/channels", headers=h1)).json()
+    gen_ch = next(c for c in channels if c["name"] == "general")
+    ch_id = gen_ch["id"]
+
+    # User 1 posts 2 messages
+    m1 = (await client.post(f"/channels/{ch_id}/messages", json={"body": "History Msg 1"}, headers=h1)).json()
+    m2 = (await client.post(f"/channels/{ch_id}/messages", json={"body": "History Msg 2"}, headers=h1)).json()
+
+    # Both users see 2 messages initially
+    u1_msgs = (await client.get(f"/channels/{ch_id}/messages", headers=h1)).json()["items"]
+    u2_msgs = (await client.get(f"/channels/{ch_id}/messages", headers=h2)).json()["items"]
+    assert len(u1_msgs) == 2
+    assert len(u2_msgs) == 2
+
+    # User 1 clears chat for themselves
+    clear_resp = await client.post(f"/channels/{ch_id}/clear", headers=h1)
+    assert clear_resp.status_code == 200
+    data = clear_resp.json()
+    assert data["channel_id"] == ch_id
+    assert "cleared_at" in data
+
+    # User 1 now sees 0 messages in channel history
+    u1_msgs_after = (await client.get(f"/channels/{ch_id}/messages", headers=h1)).json()["items"]
+    assert len(u1_msgs_after) == 0
+
+    # User 2 still sees all 2 messages (unaffected)
+    u2_msgs_after = (await client.get(f"/channels/{ch_id}/messages", headers=h2)).json()["items"]
+    assert len(u2_msgs_after) == 2
+    assert u2_msgs_after[0]["id"] == m2["id"]
+    assert u2_msgs_after[1]["id"] == m1["id"]
+
+    # User 2 posts a new message
+    m3 = (await client.post(f"/channels/{ch_id}/messages", json={"body": "New Post Msg 3"}, headers=h2)).json()
+
+    # User 1 now sees ONLY the new message (Message 3)
+    u1_msgs_final = (await client.get(f"/channels/{ch_id}/messages", headers=h1)).json()["items"]
+    assert len(u1_msgs_final) == 1
+    assert u1_msgs_final[0]["id"] == m3["id"]
+
+    # User 2 sees all 3 messages
+    u2_msgs_final = (await client.get(f"/channels/{ch_id}/messages", headers=h2)).json()["items"]
+    assert len(u2_msgs_final) == 3

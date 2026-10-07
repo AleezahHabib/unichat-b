@@ -40,3 +40,14 @@ Workspaces are isolated containers for team communication. Each workspace contai
 - Non-existent workspace returns 404 `workspace_not_found`.
 - Returns 200 `{"status": "ok"}`.
 
+
+### AC-02-07: Leave Workspace
+- Non-owner member can leave workspace (`POST /workspaces/{workspace_id}/leave`).
+- Removes user from `workspace_members` and all `channel_members` in that workspace.
+- Owner cannot leave workspace (returns `403` with code `owner_cannot_leave`).
+
+### AC-02-08: Remove Member (Owner Only)
+- Owner can remove a member from the workspace (`DELETE /workspaces/{workspace_id}/members/{user_id}`).
+- Removes member from `workspace_members` and all `channel_members` in that workspace.
+- Owner cannot remove themselves (returns `400` with code `cannot_remove_owner`).
+- Non-owners cannot remove members (returns `403` with code `forbidden`).

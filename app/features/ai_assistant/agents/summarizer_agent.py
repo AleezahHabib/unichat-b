@@ -17,7 +17,7 @@ class SummaryOutput(BaseModel):
 
 def create_summarizer_agent() -> Agent[AssistantContext]:
     return Agent[AssistantContext](
-        name="UniChat Summarizer",
+        name="FistaChat Summarizer",
         model=get_chat_model(),
         instructions=summarizer_instructions,
         output_type=SummaryOutput,

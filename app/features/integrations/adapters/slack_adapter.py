@@ -61,7 +61,7 @@ class SlackAdapter(PlatformAdapter):
             kwargs = {
                 "channel": external_channel_id,
                 "text": body,
-                "username": f"{author_name} (via UniChat)",
+                "username": f"{author_name} (via FistaChat)",
             }
             if thread_ts:
                 kwargs["thread_ts"] = thread_ts

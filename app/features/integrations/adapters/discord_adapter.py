@@ -61,7 +61,7 @@ class DiscordAdapter(PlatformAdapter):
             res = await client.post(
                 f"{DISCORD_API_BASE}/channels/{external_channel_id}/webhooks",
                 headers=self.headers,
-                json={"name": "UniChat Relay"},
+                json={"name": "FistaChat Relay"},
             )
             if res.status_code not in (200, 201):
                 raise RuntimeError(f"Failed to create Discord webhook: {res.text}")
@@ -90,7 +90,7 @@ class DiscordAdapter(PlatformAdapter):
 
         payload = {
             "content": content,
-            "username": f"{author_name} (via UniChat)",
+            "username": f"{author_name} (via FistaChat)",
             "allowed_mentions": {"parse": []},
         }
 

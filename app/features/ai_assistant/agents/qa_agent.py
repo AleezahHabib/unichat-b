@@ -16,7 +16,7 @@ class AnswerOutput(BaseModel):
 
 def create_qa_agent() -> Agent[AssistantContext]:
     return Agent[AssistantContext](
-        name="UniChat QA Agent",
+        name="FistaChat QA Agent",
         model=get_chat_model(),
         instructions=qa_instructions,
         output_type=AnswerOutput,

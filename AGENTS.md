@@ -1,4 +1,4 @@
-# AGENTS.md — UniChat
+# AGENTS.md — FistaChat
 
 > Read this file before every task in this repository, in every session, even
 > if a chat prompt already repeats part of it. This file is the persistent
@@ -94,7 +94,7 @@ Two exceptions:
 
 ## 4. Product blueprint
 
-**UniChat** — a unified team chat app. Users chat in workspaces and channels,
+**FistaChat** — a unified team chat app by FISTA Solutions. Users chat in workspaces and channels,
 like Slack. A UniChat channel can be linked to a Slack channel and/or a
 Discord channel so messages flow **both ways**. An AI assistant summarizes
 channels, answers questions with **cited source messages**, drafts replies,

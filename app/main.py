@@ -49,9 +49,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="UniChat API",
+    title="FistaChat API",
     version="1.0.0",
-    description="UniChat unified communication platform API",
+    description="FistaChat unified communication platform API by FISTA Solutions",
     lifespan=lifespan,
 )
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  title: UniChat API
-  description: UniChat unified communication platform API
+  title: FistaChat API
+  description: FistaChat unified communication platform API by FISTA Solutions
   version: 1.0.0
 paths:
   /auth/signup:

@@ -50,7 +50,7 @@ def check_ai() -> int:
         genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
         res = genai_client.models.embed_content(
             model=settings.EMBEDDING_MODEL,
-            contents="UniChat foundation test embedding",
+            contents="FistaChat foundation test embedding",
             config=types.EmbedContentConfig(
                 task_type="RETRIEVAL_QUERY",
                 output_dimensionality=settings.EMBEDDING_DIM,

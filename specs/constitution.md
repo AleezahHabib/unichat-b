@@ -1,7 +1,7 @@
-# UniChat Engineering Constitution
+# FistaChat Engineering Constitution
 
 ## 1. Core Principles & Philosophy
-UniChat is built spec-first, robust, clean, and free of vendor lock-in. Every line of implementation code flows directly from documented requirements, formal OpenAPI contracts, and testable acceptance criteria.
+FistaChat is built spec-first, robust, clean, and free of vendor lock-in. Every line of implementation code flows directly from documented requirements, formal OpenAPI contracts, and testable acceptance criteria.
 
 1. **Free to Run**: Zero paid API dependencies. The sole external intelligence engine is Google Gemini using a free API key from Google AI Studio.
 2. **Containerless Simplicity**: No Docker in development, CI, or deployment. The system runs cleanly on bare metal (Windows, macOS, Linux) with Python 3.11+ and Node 20+.
@@ -44,4 +44,4 @@ Every backend feature under `backend/app/features/<feature_name>/` must contain 
 ---
 
 ## 5. Unified Data Strategy
-All conversational events—UniChat native messages, Slack events, Discord webhooks—live in the single `messages` table. This is non-negotiable as it guarantees unified timelines, single-query cursor pagination, single-vector-table semantic search, and robust deduplication via partial unique indexing.
+All conversational events—FistaChat native messages, Slack events, Discord webhooks—live in the single `messages` table. This is non-negotiable as it guarantees unified timelines, single-query cursor pagination, single-vector-table semantic search, and robust deduplication via partial unique indexing.

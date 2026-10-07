@@ -20,7 +20,7 @@ assistant_instructions = instructions_path.read_text(encoding="utf-8")
 
 def create_assistant_agent() -> Agent[AssistantContext]:
     return Agent[AssistantContext](
-        name="UniChat Assistant",
+        name="FistaChat Assistant",
         model=get_chat_model(),
         instructions=assistant_instructions,
         tools=[list_channels, get_channel_history, search_messages, get_thread],

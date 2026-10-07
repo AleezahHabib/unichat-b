@@ -1,9 +1,9 @@
-# UniChat Product Overview
+# FistaChat Product Overview
 
 ## Tagline
 > **Chat. Connect. Ask.**
 
-UniChat bridges the fragmentation between modern collaboration tools. While organizations frequently find themselves fractured across Slack channels, Discord communities, and internal chat applications, UniChat acts as the unified conversational hub.
+FistaChat bridges the fragmentation between modern collaboration tools. While organizations frequently find themselves fractured across Slack channels, Discord communities, and internal chat applications, FistaChat acts as the unified conversational hub.
 
 ---
 
@@ -17,9 +17,9 @@ UniChat bridges the fragmentation between modern collaboration tools. While orga
 
 ### 2. Bidirectional External Sync (Connect)
 - Seamless 1:1 channel links to Slack channels (via Slack Socket Mode) and Discord channels (via Discord REST polling and incoming webhooks).
-- Full two-way message relay: Slack/Discord events appear in UniChat with author identification and platform badges; UniChat messages post into external channels marked as `Name (via UniChat)`.
+- Full two-way message relay: Slack/Discord events appear in FistaChat with author identification and platform badges; FistaChat messages post into external channels marked as `Name (via FistaChat)`.
 - Bulletproof multi-layer deduplication and echo prevention to eliminate infinite loop rebroadcasts.
-- Thread mapping between UniChat and Slack threads.
+- Thread mapping between FistaChat and Slack threads.
 
 ### 3. Grounded Intelligence (Ask)
 - **Channel Summarization**: Generates structured recaps categorizing Key Points, Decisions Made, and Open Questions—every item backed by clickable message citations.
@@ -30,7 +30,7 @@ UniChat bridges the fragmentation between modern collaboration tools. While orga
 ---
 
 ## Target Audience & Scope
-UniChat is built for engineering teams, open-source communities, and hybrid remote organizations that coordinate across heterogeneous chat networks.
+FistaChat is built for engineering teams, open-source communities, and hybrid remote organizations that coordinate across heterogeneous chat networks.
 
 - **In Scope**: Marketing landing page (light + dark mode), JWT auth, workspaces, invite links, public channels, messaging & threads, WebSocket realtime, Slack two-way sync, Discord two-way sync, Gemini AI assistant (summarize, Q&A, draft reply, semantic search).
 - **Out of Scope**: SSO/2FA, audio/video streaming, mobile native clients, private channels/DMs, file attachments, admin analytics dashboards, Microsoft Teams sync (adapter interface only), external edit/delete propagation.

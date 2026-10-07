@@ -1,4 +1,4 @@
-# UniChat Design System: "Skyline"
+# FistaChat Design System: "Skyline"
 
 ## 1. Visual Philosophy & Direction
 Inspired by cap.so's bright, airy, confident aesthetic:
@@ -6,7 +6,7 @@ Inspired by cap.so's bright, airy, confident aesthetic:
 - Interactive live product preview controlled via intuitive tabs.
 - Realistic, high-fidelity application window with clean glass borders.
 - Generous whitespace and scannable visual rhythm.
-- **NOT** a clone: no reused Cap assets, copy, or borrowed layouts. UniChat brings its own distinct identity tailored to cross-platform chat and AI workflows.
+- **NOT** a clone: no reused Cap assets, copy, or borrowed layouts. FistaChat brings its own distinct identity tailored to cross-platform chat and AI workflows.
 
 ---
 
@@ -56,7 +56,7 @@ External source badges exclusively use their official brand colors with crisp wh
 
 ## 5. Motion & Micro-Interactions
 - **Transitions**: `150ms` - `250ms` `ease-out` on user-triggered actions (button hovers, tab clicks, modal pops).
-- **Signature Autonomous Animation**: Exactly **one** autonomous loop is permitted across the entire application: the **Hero Sync Demo Loop** showing a message flowing between Slack, UniChat, and Discord with live AI citation.
+- **Signature Autonomous Animation**: Exactly **one** autonomous loop is permitted across the entire application: the **Hero Sync Demo Loop** showing a message flowing between Slack, FistaChat, and Discord with live AI citation.
 - **Accessibility & Reduced Motion**:
   - The hero sync demo strictly checks `prefers-reduced-motion`.
   - When reduced motion is requested, all animation frames stop, presenting a static, beautifully rendered final preview frame.
@@ -83,11 +83,11 @@ The marketing landing page renders these 12 sections in strict order:
    - Powerful headline: *"Chat. Connect. Ask."*
    - Interactive segmented tabs (`Chat`, `Connect`, `Ask`) allowing prospective users to toggle the live product view via click or arrow keys.
    - Realistic window preview showcasing the signature **SyncDemo** autonomous loop (with reduced-motion fallback).
-4. **Platform Strip**: Clean row showing native UniChat alongside verified bi-directional sync with Slack and Discord.
+4. **Platform Strip**: Clean row showing native FistaChat alongside verified bi-directional sync with Slack and Discord.
 5. **How It Works**: 3-step visual narrative detailing workspace creation, 1:1 channel linking, and ambient AI assistance.
 6. **Feature Grid (Asymmetric)**: Non-uniform bento layout highlighting realtime speed, thread organization, and presence indicators.
 7. **Assistant Showcase**: Interactive demo view highlighting cited channel summaries, direct jump-to links, and composer reply drafts.
-8. **Integrations Hub Diagram**: Visual node diagram demonstrating how UniChat's unified `messages` table relays data to and from Slack Socket Mode and Discord Webhooks without echoes.
+8. **Integrations Hub Diagram**: Visual node diagram demonstrating how FistaChat's unified `messages` table relays data to and from Slack Socket Mode and Discord Webhooks without echoes.
 9. **"Built Spec-First" Section**: High-tech interactive card pairing an authentic folder tree with a simulated terminal showing test verification.
 10. **FAQ**: Clean accordion answering technical questions regarding zero-docker setups, data privacy, free-tier limits, and cross-platform sync.
 11. **Final CTA**: High-impact closing panel prompting immediate signup into the user's workspace.

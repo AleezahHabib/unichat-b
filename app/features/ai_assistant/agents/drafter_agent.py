@@ -10,7 +10,7 @@ drafter_instructions = instructions_path.read_text(encoding="utf-8")
 
 def create_drafter_agent() -> Agent[AssistantContext]:
     return Agent[AssistantContext](
-        name="UniChat Drafter Agent",
+        name="FistaChat Drafter Agent",
         model=get_chat_model(),
         instructions=drafter_instructions,
     )

@@ -157,10 +157,13 @@ async def accept_invite(
 )
 async def list_workspace_channels(
     workspace_id: UUID,
+    joined_only: bool = False,
+    current_user: dict = Depends(get_current_user),
     _: UUID = Depends(require_workspace_member),
     db: AsyncSession = Depends(get_db),
 ) -> list[ChannelResponse]:
-    return await workspace_service.list_workspace_channels(db, workspace_id)
+    user_id = UUID(current_user["sub"])
+    return await workspace_service.list_workspace_channels(db, workspace_id, user_id=user_id if joined_only else None)
 
 
 @router.post(

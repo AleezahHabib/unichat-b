@@ -190,9 +190,12 @@ class WorkspaceRepository:
         return result.scalar_one_or_none()
 
     async def list_workspace_channels(
-        self, db: AsyncSession, workspace_id: UUID
+        self, db: AsyncSession, workspace_id: UUID, user_id: UUID | None = None
     ) -> list[Channel]:
-        stmt = select(Channel).where(Channel.workspace_id == workspace_id).order_by(Channel.created_at.asc())
+        stmt = select(Channel).where(Channel.workspace_id == workspace_id)
+        if user_id:
+            stmt = stmt.join(ChannelMember, Channel.id == ChannelMember.channel_id).where(ChannelMember.user_id == user_id)
+        stmt = stmt.order_by(Channel.created_at.asc())
         result = await db.execute(stmt)
         return list(result.scalars().all())
 

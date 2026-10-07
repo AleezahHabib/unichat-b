@@ -363,7 +363,7 @@ invite-preview.
 | `POST /workspaces/{id}/leave` | Removes user from workspace & all channels; owner cannot leave (403) |
 | `DELETE /workspaces/{id}/members/{user_id}` | Owner only; removes member from workspace & all channels |
 | `GET /invites/{token}` / `POST /invites/{token}/accept` | No auth on GET; accept is idempotent |
-| `GET/POST /workspaces/{id}/channels` | Name normalized, unique per workspace |
+| `GET/POST /workspaces/{id}/channels` | Name normalized, unique per workspace (`GET` supports `?joined_only=true`) |
 | `POST /channels/{id}/join` / `leave` | Can't leave `#general` |
 | `GET /channels/{id}/members` | |
 | `GET/POST /channels/{id}/messages` | Cursor pagination, 50/page, newest first; 30/min/user → 429 `rate_limited` |

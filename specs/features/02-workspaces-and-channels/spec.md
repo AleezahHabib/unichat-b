@@ -51,3 +51,8 @@ Workspaces are isolated containers for team communication. Each workspace contai
 - Removes member from `workspace_members` and all `channel_members` in that workspace.
 - Owner cannot remove themselves (returns `400` with code `cannot_remove_owner`).
 - Non-owners cannot remove members (returns `403` with code `forbidden`).
+
+
+### AC-02-09: Filter workspace channels by joined_only
+- `GET /workspaces/{id}/channels?joined_only=true` returns only channels the current user is a member of.
+- Defaults to `joined_only=false` (returns all channels in workspace).

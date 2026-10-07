@@ -167,9 +167,9 @@ class WorkspaceService:
         return ChannelResponse.model_validate(channel)
 
     async def list_workspace_channels(
-        self, db: AsyncSession, workspace_id: UUID
+        self, db: AsyncSession, workspace_id: UUID, user_id: UUID | None = None
     ) -> list[ChannelResponse]:
-        channels = await workspace_repository.list_workspace_channels(db, workspace_id)
+        channels = await workspace_repository.list_workspace_channels(db, workspace_id, user_id=user_id)
         return [ChannelResponse.model_validate(c) for c in channels]
 
     async def join_channel(

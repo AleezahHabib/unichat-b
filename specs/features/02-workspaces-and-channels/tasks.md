@@ -18,3 +18,5 @@
 
 - [x] Leave Workspace: `POST /workspaces/{id}/leave` (AC-02-07)
 - [x] Remove Member: `DELETE /workspaces/{id}/members/{user_id}` (AC-02-08)
+
+- [x] AC-02-09: Add `joined_only` filter query param to `GET /workspaces/{id}/channels` and tests

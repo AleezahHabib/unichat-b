@@ -477,6 +477,13 @@ paths:
           type: string
           format: uuid
           title: Workspace Id
+      - name: joined_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Joined Only
       - name: token
         in: query
         required: false

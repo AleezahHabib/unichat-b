@@ -317,3 +317,42 @@ async def test_AC_02_08_remove_member_owner_only(client: AsyncClient):
     rem_again = await client.delete(f"/workspaces/{ws_id}/members/{member1['id']}", headers=owner_h)
     assert rem_again.status_code == 404
     assert rem_again.json()["code"] == "member_not_found"
+
+
+@pytest.mark.asyncio
+async def test_AC_02_09_list_workspace_channels_joined_only_filter(client: AsyncClient):
+    owner, owner_token = await create_user_and_login(client, "Filter Owner", "fowner@example.com")
+    member, member_token = await create_user_and_login(client, "Filter Member", "fmember@example.com")
+
+    owner_h = {"Authorization": f"Bearer {owner_token}"}
+    member_h = {"Authorization": f"Bearer {member_token}"}
+
+    ws = (await client.post("/workspaces", json={"name": "Filter WS"}, headers=owner_h)).json()
+    ws_id = ws["id"]
+
+    # Member joins workspace (auto-enrolled in #general)
+    inv = (await client.post(f"/workspaces/{ws_id}/invites", headers=owner_h)).json()
+    await client.post(f"/invites/{inv['token']}/accept", headers=member_h)
+
+    # Owner creates two more channels: #custom-joined, #custom-unjoined
+    ch_joined = (await client.post(f"/workspaces/{ws_id}/channels", json={"name": "custom-joined"}, headers=owner_h)).json()
+    ch_unjoined = (await client.post(f"/workspaces/{ws_id}/channels", json={"name": "custom-unjoined"}, headers=owner_h)).json()
+
+    # Member joins only custom-joined
+    await client.post(f"/channels/{ch_joined['id']}/join", headers=member_h)
+
+    # List all channels for member -> should see 3 (#general, #custom-joined, #custom-unjoined)
+    all_channels_resp = await client.get(f"/workspaces/{ws_id}/channels", headers=member_h)
+    assert all_channels_resp.status_code == 200
+    all_names = [c["name"] for c in all_channels_resp.json()]
+    assert "general" in all_names
+    assert "custom-joined" in all_names
+    assert "custom-unjoined" in all_names
+
+    # List joined-only channels for member -> should see 2 (#general, #custom-joined), NOT #custom-unjoined
+    joined_channels_resp = await client.get(f"/workspaces/{ws_id}/channels?joined_only=true", headers=member_h)
+    assert joined_channels_resp.status_code == 200
+    joined_names = [c["name"] for c in joined_channels_resp.json()]
+    assert "general" in joined_names
+    assert "custom-joined" in joined_names
+    assert "custom-unjoined" not in joined_names

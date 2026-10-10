@@ -14,11 +14,14 @@ from app.core.database import async_session
 from app.core.leader import is_leader
 from app.core.redis import get_redis_client
 from app.core.security import decrypt_secret
+from app.features.integrations.adapters.discord_adapter import DiscordAdapter
 from app.features.integrations.echo_guard import echo_guard
 from app.features.integrations.models import ConnectedPlatform, ChannelLink
 from app.features.integrations.service import integration_service
 from app.features.messaging.models import Message
+from app.features.realtime.events import message_created_event
 from app.features.realtime.pubsub import publish_event
+from app.features.workspaces_and_channels.models import Channel
 from app.background.embed_worker import enqueue_message_embedding
 
 logger = logging.getLogger(__name__)
@@ -267,6 +270,190 @@ async def stop_slack_socket_mode_for_platform(platform_id: UUID) -> None:
             logger.warning("Error closing Slack client for platform %s: %s", platform_id, e)
 
 
+async def poll_discord_channels() -> None:
+    """
+    Polls active Discord channel links for new messages under leader lock.
+    Respects AC-05-04 and 3-layer Echo Guard.
+    """
+    try:
+        async with async_session() as db:
+            # 1. Fetch active Discord channel links
+            stmt = select(ChannelLink).where(ChannelLink.platform == "discord")
+            links = (await db.execute(stmt)).scalars().all()
+            if not links:
+                return
+
+            # 2. Fetch connected platforms for Discord
+            p_stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "discord")
+            platforms = {p.id: p for p in (await db.execute(p_stmt)).scalars().all()}
+
+            redis = get_redis_client()
+
+            for link in links:
+                platform = platforms.get(link.platform_id)
+                if not platform:
+                    continue
+
+                try:
+                    tokens = json.loads(decrypt_secret(platform.encrypted_tokens))
+                    bot_token = tokens.get("bot_token")
+                    if not bot_token:
+                        continue
+                except Exception as e:
+                    logger.error("Error decrypting Discord tokens for platform %s: %s", platform.id, e)
+                    continue
+
+                adapter = DiscordAdapter(bot_token)
+
+                # Initialize cursor if not yet set
+                if not link.last_synced_external_id:
+                    try:
+                        init_msgs = await adapter.fetch_messages_after(link.external_channel_id, limit=1)
+                        if init_msgs:
+                            link.last_synced_external_id = str(init_msgs[-1]["id"])
+                            await db.commit()
+                            logger.info(
+                                "Initialized Discord cursor for channel %s to %s",
+                                link.external_channel_id,
+                                link.last_synced_external_id,
+                            )
+                        continue
+                    except Exception as e:
+                        logger.warning("Error initializing Discord cursor for channel %s: %s", link.external_channel_id, e)
+                        continue
+
+                try:
+                    messages = await adapter.fetch_messages_after(
+                        link.external_channel_id,
+                        after_id=link.last_synced_external_id,
+                        limit=50,
+                    )
+                except Exception as e:
+                    logger.warning("Error fetching messages for Discord channel %s: %s", link.external_channel_id, e)
+                    continue
+
+                if not messages:
+                    continue
+
+                for msg in messages:
+                    msg_id = str(msg["id"])
+                    author = msg.get("author") or {}
+                    author_id = str(author.get("id") or "")
+                    webhook_id = str(msg.get("webhook_id") or "")
+                    own_bot_id = str(platform.bot_identity or "")
+                    own_webhook_id = str(link.webhook_id or "")
+
+                    # Layer 1 Echo Guard: Identity Filter
+                    if echo_guard.is_identity_echo(
+                        author_id=author_id,
+                        own_bot_id=own_bot_id,
+                        webhook_id=webhook_id,
+                        own_webhook_id=own_webhook_id,
+                    ) or (own_bot_id and author_id == own_bot_id) or (own_webhook_id and webhook_id == own_webhook_id):
+                        logger.debug("Discord Layer 1 Echo Guard: Ignored own bot/webhook message %s", msg_id)
+                        link.last_synced_external_id = msg_id
+                        await db.commit()
+                        continue
+
+                    # Layer 3 Echo Guard: Race Window Guard
+                    if await echo_guard.is_race_window_echo(redis, msg_id):
+                        logger.debug("Discord Layer 3 Echo Guard: Ignored race window echo %s", msg_id)
+                        link.last_synced_external_id = msg_id
+                        await db.commit()
+                        continue
+
+                    # Resolve author name: nickname -> global_name -> username -> "Discord User"
+                    member = msg.get("member") or {}
+                    author_name = (
+                        member.get("nick")
+                        or author.get("global_name")
+                        or author.get("username")
+                        or "Discord User"
+                    )
+
+                    # Thread parent mapping
+                    parent_id = None
+                    ref_msg_id = (msg.get("message_reference") or {}).get("message_id")
+                    if ref_msg_id:
+                        parent_stmt = select(Message.id).where(
+                            Message.external_channel_id == link.external_channel_id,
+                            Message.external_id == str(ref_msg_id),
+                        )
+                        parent_id = (await db.execute(parent_stmt)).scalar_one_or_none()
+
+                    # Layer 2 Echo Guard: Database Unique Constraint Protection
+                    new_msg = Message(
+                        channel_id=link.channel_id,
+                        author_id=None,
+                        external_author_name=author_name,
+                        body=msg.get("content", ""),
+                        source="discord",
+                        external_id=msg_id,
+                        external_channel_id=link.external_channel_id,
+                        parent_id=parent_id,
+                        created_at=datetime.now(timezone.utc),
+                    )
+
+                    try:
+                        db.add(new_msg)
+                        link.last_synced_external_id = msg_id
+                        await db.commit()
+                        await db.refresh(new_msg)
+                    except Exception as e:
+                        # Duplicate caught by Layer 2 constraint
+                        await db.rollback()
+                        link.last_synced_external_id = msg_id
+                        await db.commit()
+                        logger.debug("Discord Layer 2 Echo Guard: Duplicate message %s ignored (%s)", msg_id, e)
+                        continue
+
+                    # Fetch workspace_id for realtime WS event
+                    ch_stmt = select(Channel.workspace_id).where(Channel.id == link.channel_id)
+                    workspace_id = (await db.execute(ch_stmt)).scalar_one_or_none()
+
+                    if workspace_id:
+                        msg_payload = {
+                            "id": str(new_msg.id),
+                            "channel_id": str(new_msg.channel_id),
+                            "author": {
+                                "id": None,
+                                "name": author_name,
+                                "avatar_color": "#5865F2",
+                            },
+                            "external_author_name": author_name,
+                            "body": new_msg.body,
+                            "source": "discord",
+                            "external_id": new_msg.external_id,
+                            "external_channel_id": new_msg.external_channel_id,
+                            "parent_id": str(new_msg.parent_id) if new_msg.parent_id else None,
+                            "created_at": new_msg.created_at.isoformat(),
+                            "edited_at": None,
+                            "deleted_at": None,
+                            "reply_count": 0,
+                        }
+                        evt = message_created_event(str(workspace_id), str(link.channel_id), msg_payload)
+                        await publish_event(redis, str(workspace_id), evt)
+
+                        # AC-05-06 / Step 4: Cross-platform relay outbound (e.g. to Slack)
+                        await integration_service.relay_outbound(db, redis, new_msg, author_name)
+
+                    # Enqueue for embedding
+                    enqueue_message_embedding(
+                        new_msg.id,
+                        link.external_channel_name or "discord",
+                        author_name,
+                        new_msg.body,
+                    )
+                    logger.info(
+                        "Synced Discord message %s from %s into UniChat channel %s",
+                        msg_id,
+                        author_name,
+                        link.channel_id,
+                    )
+    except Exception as e:
+        logger.error("Error in poll_discord_channels: %s", e, exc_info=True)
+
+
 async def sync_external_loop() -> None:
     """
     Background worker loop that manages Socket Mode listeners and pollers
@@ -279,7 +466,7 @@ async def sync_external_loop() -> None:
             current_leader = is_leader()
             if current_leader != last_leader_state:
                 if current_leader:
-                    logger.info("External sync loop acquired leader lock. Managing integrations.")
+                    logger.info("External sync loop acquired leader lock. Managing integrations (Slack Socket Mode + Discord poller).")
                 else:
                     logger.info("External sync loop lost leader lock or running as follower.")
                 last_leader_state = current_leader
@@ -307,13 +494,16 @@ async def sync_external_loop() -> None:
                     for pid in active_ids:
                         if pid not in current_db_ids:
                             await stop_slack_socket_mode_for_platform(pid)
+
+                # Poll Discord channels on each tick under leader lock
+                await poll_discord_channels()
             else:
                 # If follower or lost leadership, close all active listeners
                 active_ids = list(_active_slack_clients.keys())
                 for pid in active_ids:
                     await stop_slack_socket_mode_for_platform(pid)
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(settings.DISCORD_POLL_SECONDS)
         except asyncio.CancelledError:
             active_ids = list(_active_slack_clients.keys())
             for pid in active_ids:
@@ -321,4 +511,4 @@ async def sync_external_loop() -> None:
             break
         except Exception as e:
             logger.warning("Error in sync_external_loop: %s", e)
-            await asyncio.sleep(5)
+            await asyncio.sleep(settings.DISCORD_POLL_SECONDS)

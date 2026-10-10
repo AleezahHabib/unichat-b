@@ -314,6 +314,7 @@ class IntegrationService:
         raw_tokens = json.loads(decrypt_secret(platform.encrypted_tokens))
         webhook_url_enc: str | None = None
         webhook_id: str | None = None
+        last_synced_external_id: str | None = None
 
         if platform.platform == "slack":
             adapter = SlackAdapter(raw_tokens["bot_token"])
@@ -322,6 +323,13 @@ class IntegrationService:
             adapter = DiscordAdapter(raw_tokens["bot_token"])
             webhook_url, webhook_id = await adapter.create_webhook(req.external_channel_id)
             webhook_url_enc = encrypt_secret(webhook_url)
+            # AC-05-02: sets last_synced_external_id to current newest message ID
+            try:
+                newest_msgs = await adapter.fetch_messages_after(req.external_channel_id, limit=1)
+                if newest_msgs:
+                    last_synced_external_id = str(newest_msgs[-1]["id"])
+            except Exception as e:
+                logger.warning("Could not fetch latest Discord message for initial cursor: %s", e)
 
         # Check if the UniChat channel already has a link for this platform (upsert behavior)
         existing_links = await integration_repository.get_channel_links(db, channel_id)
@@ -334,6 +342,8 @@ class IntegrationService:
             if webhook_url_enc:
                 current_platform_link.encrypted_webhook_url = webhook_url_enc
                 current_platform_link.webhook_id = webhook_id
+            if last_synced_external_id:
+                current_platform_link.last_synced_external_id = last_synced_external_id
             await db.commit()
             await db.refresh(current_platform_link)
             return ChannelLinkResponse.model_validate(current_platform_link)
@@ -347,6 +357,7 @@ class IntegrationService:
             external_channel_name=req.external_channel_name,
             encrypted_webhook_url=webhook_url_enc,
             webhook_id=webhook_id,
+            last_synced_external_id=last_synced_external_id,
         )
         return ChannelLinkResponse.model_validate(link)
 

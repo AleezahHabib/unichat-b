@@ -342,3 +342,88 @@ async def test_AC_05_10_multi_workspace_team_id_routing(client: AsyncClient, fak
     messages_b = (await db_session.execute(stmt_b)).scalars().all()
     assert len(messages_b) == 0
 
+
+@pytest.mark.asyncio
+async def test_AC_05_04_discord_poller_and_echo_guard(client: AsyncClient, fake_redis, db_session):
+    import json
+    from sqlalchemy import select
+    from app.core.security import encrypt_secret
+    from app.features.integrations.repository import integration_repository
+    from app.features.workspaces_and_channels.repository import workspace_repository
+    from app.background.sync_external import poll_discord_channels
+    from app.features.messaging.models import Message
+
+    u, t = await create_user_and_login(client, "Discord User Test", "disc_test@example.com")
+    ws = await workspace_repository.create_workspace(db_session, "Discord Poll WS", u["id"])
+    ch = (await workspace_repository.list_workspace_channels(db_session, ws.id))[0]
+
+    # Create connected platform for Discord
+    tokens = encrypt_secret(json.dumps({"bot_token": "disc-bot-token"}))
+    p = await integration_repository.create_platform(
+        db_session, ws.id, "discord", tokens, bot_identity="BOT_DISCORD_123", display_name="Test Discord Bot"
+    )
+
+    # Link channel with initial cursor
+    link = await integration_repository.create_channel_link(
+        db_session,
+        channel_id=ch.id,
+        platform_id=p.id,
+        platform="discord",
+        external_channel_id="CH_DISCORD_999",
+        external_channel_name="test-channel",
+        encrypted_webhook_url=encrypt_secret("https://discord.com/api/webhooks/WH_123/token"),
+        webhook_id="WH_123",
+        last_synced_external_id="100",
+    )
+
+    fake_messages = [
+        # Message 1: Normal user message with member nick
+        {
+            "id": "101",
+            "content": "Hello from Discord member!",
+            "author": {"id": "USER_555", "username": "user555", "global_name": "Global 555"},
+            "member": {"nick": "Nick 555"},
+        },
+        # Message 2: Own webhook echo -> should be ignored by Layer 1
+        {
+            "id": "102",
+            "content": "Echo from webhook",
+            "author": {"id": "BOT_SOME", "username": "UniChat Relay", "bot": True},
+            "webhook_id": "WH_123",
+        },
+        # Message 3: Message with global name only
+        {
+            "id": "103",
+            "content": "Second real message",
+            "author": {"id": "USER_777", "username": "user777", "global_name": "Global 777"},
+        },
+    ]
+
+    mock_adapter = AsyncMock()
+    mock_adapter.fetch_messages_after = AsyncMock(return_value=fake_messages)
+
+    with patch("app.background.sync_external.get_redis_client", return_value=fake_redis), \
+         patch("app.background.sync_external.async_session", return_value=db_session), \
+         patch("app.background.sync_external.enqueue_message_embedding"), \
+         patch("app.background.sync_external.DiscordAdapter", return_value=mock_adapter):
+        await poll_discord_channels()
+
+    # Verify messages in UniChat database
+    stmt = select(Message).where(Message.channel_id == ch.id).order_by(Message.id)
+    saved = (await db_session.execute(stmt)).scalars().all()
+    assert len(saved) == 2
+    assert saved[0].body == "Hello from Discord member!"
+    assert saved[0].external_author_name == "Nick 555"
+    assert saved[0].source == "discord"
+    assert saved[0].external_id == "101"
+
+    assert saved[1].body == "Second real message"
+    assert saved[1].external_author_name == "Global 777"
+    assert saved[1].source == "discord"
+    assert saved[1].external_id == "103"
+
+    # Verify link cursor advanced to 103
+    fresh_link = await integration_repository.get_link_by_external_channel(db_session, "discord", "CH_DISCORD_999")
+    assert fresh_link.last_synced_external_id == "103"
+
+

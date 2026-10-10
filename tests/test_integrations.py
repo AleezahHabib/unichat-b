@@ -427,3 +427,180 @@ async def test_AC_05_04_discord_poller_and_echo_guard(client: AsyncClient, fake_
     assert fresh_link.last_synced_external_id == "103"
 
 
+@pytest.mark.asyncio
+async def test_AC_05_06_dynamic_byline_suffixes():
+    from app.features.integrations.adapters.slack_adapter import SlackAdapter
+    from app.features.integrations.adapters.discord_adapter import DiscordAdapter
+
+    slack = SlackAdapter("xoxb-fake")
+    slack.client = AsyncMock()
+    slack.client.chat_postMessage = AsyncMock(return_value={"ts": "12345.67"})
+
+    # 1. Native message to Slack -> (via FistaChat)
+    await slack.send_message(
+        external_channel_id="C123",
+        author_name="Alice",
+        body="Hello from native UniChat",
+        source="unichat",
+    )
+    assert slack.client.chat_postMessage.call_args[1]["username"] == "Alice (via FistaChat)"
+
+    # 2. Discord message relayed to Slack -> (via Discord)
+    await slack.send_message(
+        external_channel_id="C123",
+        author_name="Marco",
+        body="Hello from Discord",
+        source="discord",
+    )
+    assert slack.client.chat_postMessage.call_args[1]["username"] == "Marco (via Discord)"
+
+    # 3. Slack message relayed to Slack (edge) -> (via Slack)
+    await slack.send_message(
+        external_channel_id="C123",
+        author_name="Priya",
+        body="Hello from Slack",
+        source="slack",
+    )
+    assert slack.client.chat_postMessage.call_args[1]["username"] == "Priya (via Slack)"
+
+    # Discord Adapter tests
+    discord = DiscordAdapter("fake-bot-token")
+    mock_post = AsyncMock()
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.json = lambda: {"id": "msg_999"}
+
+    with patch("httpx.AsyncClient.post", mock_post):
+        # 1. Native message to Discord -> (via FistaChat)
+        await discord.send_message(
+            external_channel_id="CH_DISC",
+            author_name="Alice",
+            body="Hello from native UniChat",
+            webhook_url="https://discord.com/api/webhooks/1/abc",
+            source="unichat",
+        )
+        assert mock_post.call_args[1]["json"]["username"] == "Alice (via FistaChat)"
+
+        # 2. Slack message relayed to Discord -> (via Slack)
+        await discord.send_message(
+            external_channel_id="CH_DISC",
+            author_name="Priya",
+            body="Hello from Slack",
+            webhook_url="https://discord.com/api/webhooks/1/abc",
+            source="slack",
+        )
+        assert mock_post.call_args[1]["json"]["username"] == "Priya (via Slack)"
+
+        # 3. Discord message relayed to Discord -> (via Discord)
+        await discord.send_message(
+            external_channel_id="CH_DISC",
+            author_name="Marco",
+            body="Hello from Discord",
+            webhook_url="https://discord.com/api/webhooks/1/abc",
+            source="discord",
+        )
+        assert mock_post.call_args[1]["json"]["username"] == "Marco (via Discord)"
+
+
+@pytest.mark.asyncio
+async def test_AC_05_06_relay_outbound_cross_platform(fake_redis, db_session):
+    from app.features.integrations.service import integration_service
+    from app.features.messaging.models import Message
+    from app.features.workspaces_and_channels.models import Workspace, Channel
+    from app.features.authentication.models import User
+    from app.features.integrations.models import ConnectedPlatform, ChannelLink
+    from app.core.security import encrypt_secret
+    import json
+
+    # Set up DB records
+    user = User(email=f"u_{uuid.uuid4().hex[:6]}@example.com", name="Alice", password_hash="hash", avatar_color="#6366f1")
+    db_session.add(user)
+    await db_session.flush()
+
+    ws = Workspace(name="Test WS", owner_id=user.id)
+    db_session.add(ws)
+    await db_session.flush()
+
+    ch = Channel(workspace_id=ws.id, name="both-linked", created_by=user.id)
+    db_session.add(ch)
+    await db_session.flush()
+
+    slack_cp = ConnectedPlatform(
+        workspace_id=ws.id,
+        platform="slack",
+        encrypted_tokens=encrypt_secret(json.dumps({"bot_token": "xoxb-fake"})),
+        bot_identity="B_SLACK",
+        display_name="Slack WS",
+    )
+    discord_cp = ConnectedPlatform(
+        workspace_id=ws.id,
+        platform="discord",
+        encrypted_tokens=encrypt_secret(json.dumps({"bot_token": "disc-fake"})),
+        bot_identity="B_DISCORD",
+        display_name="Discord Server",
+    )
+    db_session.add_all([slack_cp, discord_cp])
+    await db_session.flush()
+
+    slack_link = ChannelLink(
+        channel_id=ch.id,
+        platform_id=slack_cp.id,
+        platform="slack",
+        external_channel_id="C_SLACK_123",
+        external_channel_name="general-slack",
+    )
+    discord_link = ChannelLink(
+        channel_id=ch.id,
+        platform_id=discord_cp.id,
+        platform="discord",
+        external_channel_id="C_DISCORD_456",
+        external_channel_name="general-discord",
+        encrypted_webhook_url=encrypt_secret("https://discord.com/api/webhooks/fake"),
+        webhook_id="WH_FAKE",
+    )
+    db_session.add_all([slack_link, discord_link])
+    await db_session.commit()
+
+    # Discord-originated message relayed to Slack
+    discord_msg = Message(
+        channel_id=ch.id,
+        author_id=None,
+        external_author_name="Marco",
+        body="Hello from Discord",
+        source="discord",
+        external_id="disc_101",
+        external_channel_id="C_DISCORD_456",
+    )
+    db_session.add(discord_msg)
+    await db_session.commit()
+
+    with patch("app.features.integrations.service.SlackAdapter") as mock_slack_cls, \
+         patch("app.features.integrations.service.DiscordAdapter") as mock_disc_cls:
+
+        mock_slack = AsyncMock()
+        mock_slack.send_message = AsyncMock(return_value="ts_123")
+        mock_slack_cls.return_value = mock_slack
+
+        mock_disc = AsyncMock()
+        mock_disc.send_message = AsyncMock(return_value="disc_out_123")
+        mock_disc_cls.return_value = mock_disc
+
+        await integration_service.relay_outbound(
+            db=db_session,
+            redis=fake_redis,
+            message=discord_msg,
+            author_name="Marco",
+        )
+
+        # Must relay to Slack with source="discord"
+        mock_slack.send_message.assert_awaited_once_with(
+            external_channel_id="C_SLACK_123",
+            author_name="Marco",
+            body="Hello from Discord",
+            thread_ts=None,
+            source="discord",
+        )
+        # Must NOT relay back to Discord
+        mock_disc.send_message.assert_not_called()
+
+
+

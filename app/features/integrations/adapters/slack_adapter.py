@@ -56,12 +56,26 @@ class SlackAdapter(PlatformAdapter):
         body: str,
         thread_ts: str | None = None,
         webhook_url: str | None = None,
+        source: str = "unichat",
     ) -> str:
         try:
+            clean_author = author_name
+            if " (via " in clean_author:
+                clean_author = clean_author.split(" (via ")[0].strip()
+
+            if source == "discord":
+                suffix = "(via Discord)"
+            elif source == "slack":
+                suffix = "(via Slack)"
+            else:
+                suffix = "(via FistaChat)"
+
+            display_name = f"{clean_author} {suffix}"
+
             kwargs = {
                 "channel": external_channel_id,
                 "text": body,
-                "username": f"{author_name} (via FistaChat)",
+                "username": display_name,
             }
             if thread_ts:
                 kwargs["thread_ts"] = thread_ts

@@ -408,6 +408,7 @@ class IntegrationService:
                         author_name=author_name,
                         body=message.body,
                         thread_ts=thread_ts,
+                        source=message.source,
                     )
                     logger.info("relay_outbound: Slack message sent, ext_id=%s", ext_id)
                     await echo_guard.set_race_window(redis, ext_id)
@@ -421,6 +422,7 @@ class IntegrationService:
                         body=message.body,
                         thread_ts=thread_ts,
                         webhook_url=webhook_url,
+                        source=message.source,
                     )
                     await echo_guard.set_race_window(redis, ext_id)
             except Exception as e:

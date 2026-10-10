@@ -22,6 +22,7 @@ class PlatformAdapter(ABC):
         body: str,
         thread_ts: str | None = None,
         webhook_url: str | None = None,
+        source: str = "unichat",
     ) -> str:
         """Sends a message to the external platform and returns the external message ID."""
         pass

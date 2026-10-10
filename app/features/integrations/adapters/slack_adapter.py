@@ -86,6 +86,25 @@ class SlackAdapter(PlatformAdapter):
             logger.error(f"Error sending message to Slack: {e}")
             raise RuntimeError(f"Slack post message failed: {e}")
 
+    async def edit_message(
+        self,
+        external_channel_id: str,
+        external_message_id: str,
+        body: str,
+        webhook_url: str | None = None,
+        thread_ts: str | None = None,
+    ) -> bool:
+        try:
+            res = await self.client.chat_update(
+                channel=external_channel_id,
+                ts=external_message_id,
+                text=body,
+            )
+            return bool(res.get("ok"))
+        except SlackApiError as e:
+            logger.error(f"Error editing Slack message {external_message_id} in {external_channel_id}: {e}")
+            return False
+
     async def resolve_user_name(self, user_id: str) -> str:
         now = time.time()
         if user_id in self.user_cache:

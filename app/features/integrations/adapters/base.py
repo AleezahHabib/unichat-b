@@ -26,3 +26,16 @@ class PlatformAdapter(ABC):
     ) -> str:
         """Sends a message to the external platform and returns the external message ID."""
         pass
+
+    @abstractmethod
+    async def edit_message(
+        self,
+        external_channel_id: str,
+        external_message_id: str,
+        body: str,
+        webhook_url: str | None = None,
+        thread_ts: str | None = None,
+    ) -> bool:
+        """Updates an existing message on the external platform."""
+        pass
+

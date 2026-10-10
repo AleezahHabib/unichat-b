@@ -603,4 +603,110 @@ async def test_AC_05_06_relay_outbound_cross_platform(fake_redis, db_session):
         mock_disc.send_message.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_AC_05_03_04_relay_edit_to_slack_and_discord(fake_redis, db_session):
+    from app.features.integrations.service import integration_service
+    from app.features.messaging.models import Message
+    from app.features.workspaces_and_channels.models import Workspace, Channel
+    from app.features.authentication.models import User
+    from app.features.integrations.models import ConnectedPlatform, ChannelLink
+    from app.core.security import encrypt_secret
+    import json
+
+    user = User(email=f"u_{uuid.uuid4().hex[:6]}@example.com", name="Alice", password_hash="hash", avatar_color="#6366f1")
+    db_session.add(user)
+    await db_session.flush()
+
+    ws = Workspace(name="Edit WS", owner_id=user.id)
+    db_session.add(ws)
+    await db_session.flush()
+
+    ch = Channel(workspace_id=ws.id, name="edit-linked", created_by=user.id)
+    db_session.add(ch)
+    await db_session.flush()
+
+    slack_cp = ConnectedPlatform(
+        workspace_id=ws.id,
+        platform="slack",
+        encrypted_tokens=encrypt_secret(json.dumps({"bot_token": "xoxb-fake"})),
+        bot_identity="B_SLACK",
+        display_name="Slack WS",
+    )
+    discord_cp = ConnectedPlatform(
+        workspace_id=ws.id,
+        platform="discord",
+        encrypted_tokens=encrypt_secret(json.dumps({"bot_token": "disc-fake"})),
+        bot_identity="B_DISCORD",
+        display_name="Discord Server",
+    )
+    db_session.add_all([slack_cp, discord_cp])
+    await db_session.flush()
+
+    slack_link = ChannelLink(
+        channel_id=ch.id,
+        platform_id=slack_cp.id,
+        platform="slack",
+        external_channel_id="C_SLACK_EDIT",
+        external_channel_name="slack-edit",
+    )
+    discord_link = ChannelLink(
+        channel_id=ch.id,
+        platform_id=discord_cp.id,
+        platform="discord",
+        external_channel_id="C_DISCORD_EDIT",
+        external_channel_name="discord-edit",
+        encrypted_webhook_url=encrypt_secret("https://discord.com/api/webhooks/fake/token"),
+        webhook_id="WH_FAKE",
+    )
+    db_session.add_all([slack_link, discord_link])
+    await db_session.commit()
+
+    # Native message edited in FistaChat
+    msg = Message(
+        channel_id=ch.id,
+        author_id=user.id,
+        body="Original body",
+        source="unichat",
+    )
+    db_session.add(msg)
+    await db_session.commit()
+
+    # Mock Redis cached ext_ids from initial relay
+    await fake_redis.set(f"unichat:msg_ext:{msg.id}:slack", "ts_999")
+    await fake_redis.set(f"unichat:msg_ext:{msg.id}:discord", "disc_999")
+
+    with patch("app.features.integrations.service.SlackAdapter") as mock_slack_cls, \
+         patch("app.features.integrations.service.DiscordAdapter") as mock_disc_cls:
+
+        mock_slack = AsyncMock()
+        mock_slack.edit_message = AsyncMock(return_value=True)
+        mock_slack_cls.return_value = mock_slack
+
+        mock_disc = AsyncMock()
+        mock_disc.edit_message = AsyncMock(return_value=True)
+        mock_disc_cls.return_value = mock_disc
+
+        await integration_service.relay_edit(
+            db=db_session,
+            redis=fake_redis,
+            message=msg,
+            new_body="Updated body",
+        )
+
+        mock_slack.edit_message.assert_awaited_once_with(
+            external_channel_id="C_SLACK_EDIT",
+            external_message_id="ts_999",
+            body="Updated body",
+        )
+
+        mock_disc.edit_message.assert_awaited_once_with(
+            external_channel_id="C_DISCORD_EDIT",
+            external_message_id="disc_999",
+            body="Updated body",
+            webhook_url="https://discord.com/api/webhooks/fake/token",
+            thread_ts=None,
+        )
+
+
+
 

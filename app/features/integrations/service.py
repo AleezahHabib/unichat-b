@@ -1,6 +1,7 @@
 import json
 import logging
 import secrets
+from datetime import datetime
 from uuid import UUID
 import httpx
 
@@ -412,6 +413,8 @@ class IntegrationService:
                     )
                     logger.info("relay_outbound: Slack message sent, ext_id=%s", ext_id)
                     await echo_guard.set_race_window(redis, ext_id)
+                    if redis:
+                        await redis.set(f"unichat:msg_ext:{message.id}:slack", ext_id, ex=7776000)
 
                 elif link.platform == "discord" and link.encrypted_webhook_url:
                     webhook_url = decrypt_secret(link.encrypted_webhook_url)
@@ -425,9 +428,123 @@ class IntegrationService:
                         source=message.source,
                     )
                     await echo_guard.set_race_window(redis, ext_id)
+                    if redis:
+                        await redis.set(f"unichat:msg_ext:{message.id}:discord", ext_id, ex=7776000)
             except Exception as e:
                 logger.error("relay_outbound: failed to relay to %s: %s", link.platform, e, exc_info=True)
 
+    async def _find_external_message_id(
+        self, link: ChannelLink, bot_token: str, created_at: datetime
+    ) -> str | None:
+        """
+        Fallback discovery: looks up the corresponding external message ID
+        if it wasn't previously cached in Redis.
+        """
+        try:
+            msg_ts = created_at.timestamp()
+            if link.platform == "slack":
+                from slack_sdk.web.async_client import AsyncWebClient
+                client = AsyncWebClient(token=bot_token)
+                history = await client.conversations_history(
+                    channel=link.external_channel_id,
+                    oldest=str(msg_ts - 180),
+                    latest=str(msg_ts + 180),
+                    limit=20,
+                )
+                messages = history.get("messages", [])
+                if messages:
+                    closest = min(messages, key=lambda m: abs(float(m.get("ts", 0)) - msg_ts))
+                    return str(closest["ts"])
+            elif link.platform == "discord":
+                headers = {"Authorization": f"Bot {bot_token}"}
+                async with httpx.AsyncClient() as http:
+                    r = await http.get(
+                        f"https://discord.com/api/v10/channels/{link.external_channel_id}/messages?limit=20",
+                        headers=headers,
+                    )
+                    if r.status_code == 200:
+                        disc_msgs = r.json()
+                        def snowflake_to_ts(msg_id: str) -> float:
+                            return ((int(msg_id) >> 22) + 1420070400000) / 1000.0
+
+                        if disc_msgs:
+                            closest = min(disc_msgs, key=lambda m: abs(snowflake_to_ts(m["id"]) - msg_ts))
+                            return str(closest["id"])
+        except Exception as e:
+            logger.warning("Could not auto-discover external message ID for link %s: %s", link.id, e)
+        return None
+
+    async def relay_edit(
+        self, db: AsyncSession, redis: Redis, message: Message, new_body: str
+    ) -> None:
+        """
+        Relays an edited message to linked external platforms (Slack and Discord).
+        """
+        logger.info("relay_edit called for message %s (channel=%s)", message.id, message.channel_id)
+        links = await integration_repository.get_channel_links(db, message.channel_id)
+        if not links:
+            return
+
+        thread_ts: str | None = None
+        if message.parent_id:
+            parent = await message_repository.get_message_by_id(db, message.parent_id)
+            if parent:
+                thread_ts = parent.external_id or parent.body[:60]
+
+        for link in links:
+            platform = await integration_repository.get_platform(db, link.platform_id)
+            if not platform:
+                continue
+
+            raw_tokens = json.loads(decrypt_secret(platform.encrypted_tokens))
+
+            # Look up external ID for this message on this platform
+            ext_id: str | None = None
+            if redis:
+                raw_ext_id = await redis.get(f"unichat:msg_ext:{message.id}:{link.platform}")
+                if raw_ext_id:
+                    ext_id = raw_ext_id.decode("utf-8") if isinstance(raw_ext_id, bytes) else str(raw_ext_id)
+
+            if not ext_id and message.external_channel_id == link.external_channel_id and message.external_id:
+                ext_id = message.external_id
+
+            if not ext_id:
+                ext_id = await self._find_external_message_id(
+                    link=link,
+                    bot_token=raw_tokens["bot_token"],
+                    created_at=message.created_at,
+                )
+                if ext_id and redis:
+                    await redis.set(f"unichat:msg_ext:{message.id}:{link.platform}", ext_id, ex=7776000)
+
+            if not ext_id:
+                logger.warning("relay_edit: could not find external message ID for %s on %s", message.id, link.platform)
+                continue
+
+            try:
+                if link.platform == "slack":
+                    adapter = SlackAdapter(raw_tokens["bot_token"])
+                    await adapter.edit_message(
+                        external_channel_id=link.external_channel_id,
+                        external_message_id=ext_id,
+                        body=new_body,
+                    )
+                    logger.info("relay_edit: Slack message %s updated in %s", ext_id, link.external_channel_id)
+                elif link.platform == "discord" and link.encrypted_webhook_url:
+                    webhook_url = decrypt_secret(link.encrypted_webhook_url)
+                    adapter = DiscordAdapter(raw_tokens["bot_token"])
+                    await adapter.edit_message(
+                        external_channel_id=link.external_channel_id,
+                        external_message_id=ext_id,
+                        body=new_body,
+                        webhook_url=webhook_url,
+                        thread_ts=thread_ts,
+                    )
+                    logger.info("relay_edit: Discord message %s updated in %s", ext_id, link.external_channel_id)
+            except Exception as e:
+                logger.error("relay_edit: failed to relay edit to %s: %s", link.platform, e, exc_info=True)
+
 
 integration_service = IntegrationService()
+
 

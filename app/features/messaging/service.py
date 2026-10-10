@@ -195,6 +195,10 @@ class MessageService:
             )
             await publish_event(redis, str(ch.workspace_id), evt)
 
+            # Relay outbound edit to linked external platforms (Slack, Discord)
+            from app.features.integrations.service import integration_service
+            await integration_service.relay_edit(db, redis, updated_msg, body)
+
         return resp
 
     async def delete_message(

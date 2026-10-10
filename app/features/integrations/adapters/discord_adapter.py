@@ -116,6 +116,37 @@ class DiscordAdapter(PlatformAdapter):
             data = res.json()
             return str(data["id"])
 
+    async def edit_message(
+        self,
+        external_channel_id: str,
+        external_message_id: str,
+        body: str,
+        webhook_url: str | None = None,
+        thread_ts: str | None = None,
+    ) -> bool:
+        if not webhook_url:
+            logger.warning("Webhook URL required for Discord edit_message")
+            return False
+
+        content = body
+        if thread_ts:
+            snippet = thread_ts[:60]
+            content = f'↪ replying: "{snippet}"\n{body}'
+
+        payload = {
+            "content": content,
+            "allowed_mentions": {"parse": []},
+        }
+
+        clean_webhook_url = webhook_url.split("?")[0]
+        async with httpx.AsyncClient() as client:
+            url = f"{clean_webhook_url}/messages/{external_message_id}"
+            res = await client.patch(url, json=payload)
+            if res.status_code not in (200, 204):
+                logger.error(f"Discord webhook edit message failed: {res.status_code} {res.text}")
+                return False
+            return True
+
     async def fetch_messages_after(
         self, external_channel_id: str, after_id: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:

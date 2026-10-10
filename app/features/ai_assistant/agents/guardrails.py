@@ -20,6 +20,7 @@ INJECTION_PATTERNS = [
 @input_guardrail
 async def scope_and_injection_guardrail(
     wrapper: RunContextWrapper[AssistantContext],
+    agent: Any,
     data: Any,
 ) -> GuardrailFunctionOutput:
     ctx = wrapper.context
@@ -68,6 +69,7 @@ async def scope_and_injection_guardrail(
 @output_guardrail
 async def citation_guardrail(
     wrapper: RunContextWrapper[AssistantContext],
+    agent: Any,
     data: Any,
 ) -> GuardrailFunctionOutput:
     ctx = wrapper.context

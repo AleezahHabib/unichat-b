@@ -9,6 +9,7 @@ class Citation(BaseModel):
     channel_name: str
     created_at: datetime
     snippet: str
+    source: str = "unichat"
 
 
 class AssistantChatRequest(BaseModel):
@@ -35,8 +36,12 @@ class SummarizeRequest(BaseModel):
 
 class SummarizeResponse(BaseModel):
     summary: str
+    key_points: list[str] = []
+    decisions: list[str] = []
+    open_questions: list[str] = []
     key_decisions: list[str] = []
     action_items: list[str] = []
+    citations: list[Citation] = []
     message_count: int
 
 
@@ -57,3 +62,4 @@ class SearchResult(BaseModel):
     created_at: datetime
     score: float = 1.0
     is_semantic: bool = False
+    source: str = "unichat"

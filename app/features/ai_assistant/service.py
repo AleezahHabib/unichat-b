@@ -107,14 +107,14 @@ class AIAssistantService:
         if ctx.seen_message_ids:
             seen_msgs = await ai_assistant_repository.get_messages_by_ids(db, list(ctx.seen_message_ids))
             for m in seen_msgs:
-                if str(m["message_id"]) in answer or f"#{m['channel_name']}" in answer:
-                    citations.append({
-                        "message_id": str(m["message_id"]),
-                        "author_name": m["author_name"],
-                        "channel_name": m["channel_name"],
-                        "created_at": m["created_at"].isoformat(),
-                        "snippet": m["body"][:100],
-                    })
+                citations.append({
+                    "message_id": str(m["message_id"]),
+                    "author_name": m["author_name"],
+                    "channel_name": m["channel_name"],
+                    "created_at": m["created_at"].isoformat() if hasattr(m["created_at"], "isoformat") else str(m["created_at"]),
+                    "snippet": m["body"][:100],
+                    "source": m.get("source", "unichat"),
+                })
 
         # Save to chat history
         await ai_assistant_repository.create_chat_entry(
@@ -205,10 +205,27 @@ class AIAssistantService:
                 decisions = []
                 open_qs = []
 
+            # Build citations for the summarized messages
+            citations = [
+                Citation(
+                    message_id=m["message_id"],
+                    author_name=m["author_name"],
+                    channel_name=m["channel_name"],
+                    created_at=m["created_at"],
+                    snippet=m["body"][:100],
+                    source=m.get("source", "unichat"),
+                )
+                for m in messages
+            ]
+
             return SummarizeResponse(
                 summary=summary_text,
+                key_points=key_pts,
+                decisions=decisions,
+                open_questions=open_qs,
                 key_decisions=decisions,
                 action_items=open_qs,
+                citations=citations,
                 message_count=len(messages),
             )
         except Exception as e:
@@ -286,6 +303,7 @@ class AIAssistantService:
                             created_at=r["created_at"],
                             score=r.get("score", 0.9),
                             is_semantic=True,
+                            source=r.get("source", "unichat"),
                         )
                         for r in results
                     ]
@@ -304,6 +322,7 @@ class AIAssistantService:
                 created_at=r["created_at"],
                 score=1.0,
                 is_semantic=False,
+                source=r.get("source", "unichat"),
             )
             for r in results
         ]

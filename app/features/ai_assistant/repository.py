@@ -57,6 +57,7 @@ class AIAssistantRepository:
             select(
                 Message.id.label("message_id"),
                 Message.channel_id,
+                Message.source.label("source"),
                 Channel.name.label("channel_name"),
                 User.name.label("author_name"),
                 Message.external_author_name,
@@ -72,6 +73,7 @@ class AIAssistantRepository:
             {
                 "message_id": r.message_id,
                 "channel_id": r.channel_id,
+                "source": r.source or "unichat",
                 "channel_name": r.channel_name,
                 "author_name": r.author_name or r.external_author_name or "Unknown",
                 "body": r.body,
@@ -97,6 +99,7 @@ class AIAssistantRepository:
                 select(
                     Message.id.label("message_id"),
                     Message.channel_id,
+                    Message.source.label("source"),
                     Channel.name.label("channel_name"),
                     User.name.label("author_name"),
                     Message.external_author_name,
@@ -121,6 +124,7 @@ class AIAssistantRepository:
                 {
                     "message_id": r.message_id,
                     "channel_id": r.channel_id,
+                    "source": r.source or "unichat",
                     "channel_name": r.channel_name,
                     "author_name": r.author_name or r.external_author_name or "Unknown",
                     "body": r.body,
@@ -147,6 +151,7 @@ class AIAssistantRepository:
             select(
                 Message.id.label("message_id"),
                 Message.channel_id,
+                Message.source.label("source"),
                 Channel.name.label("channel_name"),
                 User.name.label("author_name"),
                 Message.external_author_name,
@@ -170,6 +175,7 @@ class AIAssistantRepository:
             {
                 "message_id": r.message_id,
                 "channel_id": r.channel_id,
+                "source": r.source or "unichat",
                 "channel_name": r.channel_name,
                 "author_name": r.author_name or r.external_author_name or "Unknown",
                 "body": r.body,
@@ -187,6 +193,7 @@ class AIAssistantRepository:
             select(
                 Message.id.label("message_id"),
                 Message.channel_id,
+                Message.source.label("source"),
                 Channel.name.label("channel_name"),
                 User.name.label("author_name"),
                 Message.external_author_name,
@@ -207,6 +214,7 @@ class AIAssistantRepository:
             {
                 "message_id": r.message_id,
                 "channel_id": r.channel_id,
+                "source": r.source or "unichat",
                 "channel_name": r.channel_name,
                 "author_name": r.author_name or r.external_author_name or "Unknown",
                 "body": r.body,

@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    CHAT_MODEL: str = "gemini-2.5-flash"
+    CHAT_MODEL: str = "gemini-3.8-flash"
     EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIM: int = 768
     AI_REQUESTS_PER_MINUTE: int = 8

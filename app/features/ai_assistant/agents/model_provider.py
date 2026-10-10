@@ -28,7 +28,10 @@ def get_openai_client() -> AsyncOpenAI:
 
 def get_chat_model() -> OpenAIChatCompletionsModel:
     client = get_openai_client()
+    model_name = settings.CHAT_MODEL
+    if model_name in ("gemini-2.5-flash", "", None):
+        model_name = "gemini-3.8-flash"
     return OpenAIChatCompletionsModel(
-        model=settings.CHAT_MODEL,
+        model=model_name,
         openai_client=client,
     )

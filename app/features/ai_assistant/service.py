@@ -109,6 +109,7 @@ class AIAssistantService:
             for m in seen_msgs:
                 citations.append({
                     "message_id": str(m["message_id"]),
+                    "channel_id": str(m["channel_id"]) if m.get("channel_id") else None,
                     "author_name": m["author_name"],
                     "channel_name": m["channel_name"],
                     "created_at": m["created_at"].isoformat() if hasattr(m["created_at"], "isoformat") else str(m["created_at"]),
@@ -209,6 +210,7 @@ class AIAssistantService:
             citations = [
                 Citation(
                     message_id=m["message_id"],
+                    channel_id=m.get("channel_id"),
                     author_name=m["author_name"],
                     channel_name=m["channel_name"],
                     created_at=m["created_at"],

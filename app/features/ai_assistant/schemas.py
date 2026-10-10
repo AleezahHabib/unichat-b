@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class Citation(BaseModel):
     message_id: UUID
+    channel_id: UUID | None = None
     author_name: str
     channel_name: str
     created_at: datetime

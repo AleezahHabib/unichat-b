@@ -409,7 +409,7 @@ async def test_AC_05_04_discord_poller_and_echo_guard(client: AsyncClient, fake_
         await poll_discord_channels()
 
     # Verify messages in UniChat database
-    stmt = select(Message).where(Message.channel_id == ch.id).order_by(Message.id)
+    stmt = select(Message).where(Message.channel_id == ch.id).order_by(Message.external_id)
     saved = (await db_session.execute(stmt)).scalars().all()
     assert len(saved) == 2
     assert saved[0].body == "Hello from Discord member!"

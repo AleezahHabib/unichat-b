@@ -1,19 +1,15 @@
-import asyncio
-import logging
 from datetime import datetime
 from uuid import UUID
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.background.embed_worker import enqueue_message_embedding
-from app.core.database import async_session
 from app.core.errors import AppError
 from app.core.rate_limit import check_rate_limit
 from app.features.authentication.repository import user_repository
 from app.features.messaging.models import Message
 from app.features.messaging.repository import message_repository
 from app.features.messaging.schemas import (
-    ClearChannelResponse,
     CreateMessageRequest,
     MessageAuthor,
     MessageResponse,
@@ -30,19 +26,24 @@ from app.features.realtime.events import (
 from app.features.realtime.pubsub import publish_event
 from app.features.workspaces_and_channels.repository import workspace_repository
 
-logger = logging.getLogger("unichat.messaging")
 
 
 def format_message_response(item: dict) -> MessageResponse:
-    msg = item["message"]
+    msg: Message = item["message"]
     is_deleted = msg.deleted_at is not None
+    avatar_color = item.get("avatar_color")
+    if not avatar_color:
+        if msg.source == "slack":
+            avatar_color = "#4A154B"
+        elif msg.source == "discord":
+            avatar_color = "#5865F2"
     return MessageResponse(
         id=msg.id,
         channel_id=msg.channel_id,
         author=MessageAuthor(
             id=msg.author_id,
             name=item["author_name"],
-            avatar_color=item["avatar_color"],
+            avatar_color=avatar_color,
             is_external=msg.source != "unichat",
         ),
         body=msg.body if not is_deleted else "This message was deleted",
@@ -121,22 +122,10 @@ class MessageService:
                 evt = message_created_event(ws_id, channel_id, resp.model_dump(mode="json"))
             await publish_event(redis, ws_id, evt)
 
-            # Relay outbound to linked external platforms asynchronously in background task
-            # Slack / Discord outbound relay failures or latency must never block UniChat message creation
+            # Relay outbound to linked external platforms (Slack, Discord)
+            from app.features.integrations.service import integration_service
             author_name_relay = user.name if user else "Unknown"
-            msg_id = msg.id
-
-            async def _safe_relay():
-                try:
-                    from app.features.integrations.service import integration_service
-                    async with async_session() as bg_db:
-                        bg_msg = await message_repository.get_message_by_id(bg_db, msg_id)
-                        if bg_msg:
-                            await integration_service.relay_outbound(bg_db, redis, bg_msg, author_name_relay)
-                except Exception as exc:
-                    logger.error(f"Outbound relay background task failed for message {msg_id}: {exc}", exc_info=True)
-
-            asyncio.create_task(_safe_relay())
+            await integration_service.relay_outbound(db, redis, msg, author_name_relay)
 
         # Enqueue embedding for AI vector search
         ch_name = ch.name if ch else "general"
@@ -151,24 +140,12 @@ class MessageService:
         channel_id: UUID,
         limit: int = 50,
         cursor: str | None = None,
-        user_id: UUID | None = None,
     ) -> MessagesPageResponse:
         items_raw, next_cursor = await message_repository.get_channel_messages(
-            db, channel_id=channel_id, limit=limit, cursor=cursor, user_id=user_id
+            db, channel_id=channel_id, limit=limit, cursor=cursor
         )
         items = [format_message_response(item) for item in items_raw]
         return MessagesPageResponse(items=items, next_cursor=next_cursor)
-
-    async def clear_channel_for_user(
-        self,
-        db: AsyncSession,
-        channel_id: UUID,
-        user_id: UUID,
-    ) -> ClearChannelResponse:
-        cleared_at = await message_repository.upsert_user_cleared_at(
-            db, user_id=user_id, channel_id=channel_id
-        )
-        return ClearChannelResponse(channel_id=channel_id, cleared_at=cleared_at)
 
     async def get_thread(self, db: AsyncSession, message_id: UUID) -> ThreadResponse:
         p_item, replies_raw = await message_repository.get_thread(db, message_id)
@@ -260,3 +237,5 @@ class MessageService:
 
 
 message_service = MessageService()
+
+

@@ -10,6 +10,7 @@ from app.features.authentication.repository import user_repository
 from app.features.messaging.models import Message
 from app.features.messaging.repository import message_repository
 from app.features.messaging.schemas import (
+    ClearChannelResponse,
     CreateMessageRequest,
     MessageAuthor,
     MessageResponse,
@@ -140,12 +141,24 @@ class MessageService:
         channel_id: UUID,
         limit: int = 50,
         cursor: str | None = None,
+        user_id: UUID | None = None,
     ) -> MessagesPageResponse:
         items_raw, next_cursor = await message_repository.get_channel_messages(
-            db, channel_id=channel_id, limit=limit, cursor=cursor
+            db, channel_id=channel_id, limit=limit, cursor=cursor, user_id=user_id
         )
         items = [format_message_response(item) for item in items_raw]
         return MessagesPageResponse(items=items, next_cursor=next_cursor)
+
+    async def clear_channel_for_user(
+        self,
+        db: AsyncSession,
+        channel_id: UUID,
+        user_id: UUID,
+    ) -> ClearChannelResponse:
+        cleared_at = await message_repository.upsert_user_cleared_at(
+            db, user_id=user_id, channel_id=channel_id
+        )
+        return ClearChannelResponse(channel_id=channel_id, cleared_at=cleared_at)
 
     async def get_thread(self, db: AsyncSession, message_id: UUID) -> ThreadResponse:
         p_item, replies_raw = await message_repository.get_thread(db, message_id)

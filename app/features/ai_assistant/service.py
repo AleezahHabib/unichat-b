@@ -1,3 +1,11 @@
+import asyncio
+import openai
+from agents.exceptions import (
+    InputGuardrailTripwireTriggered,
+    OutputGuardrailTripwireTriggered,
+    ModelTimeoutError,
+    ToolTimeoutError,
+)
 import json
 import logging
 from uuid import UUID
@@ -98,9 +106,22 @@ class AIAssistantService:
         try:
             res = await Runner.run(agent, input=req.message, context=ctx)
             answer = str(res.final_output) if res and res.final_output else "No response generated."
+        except InputGuardrailTripwireTriggered as e:
+            logger.info(f"Input guardrail triggered: {e}")
+            out_info = getattr(getattr(e, "guardrail_result", None), "output", None)
+            answer = getattr(out_info, "output_info", None) or "I can only use channels you've joined."
+        except OutputGuardrailTripwireTriggered as e:
+            logger.warning(f"Output guardrail triggered: {e}")
+            answer = "I apologize, but I could not verify all sources for that response."
+        except openai.RateLimitError as e:
+            logger.warning(f"Gemini rate limit 429: {e}")
+            raise AppError("AI service is currently busy. Please try again in 10s", code="ai_busy", status_code=503)
+        except (openai.APITimeoutError, asyncio.TimeoutError, TimeoutError, ModelTimeoutError, ToolTimeoutError) as e:
+            logger.error(f"AI assistant timeout: {e}")
+            raise AppError("AI assistant timed out generating a response.", code="ai_timeout", status_code=504)
         except Exception as e:
-            logger.error(f"Error running assistant_agent: {e}")
-            raise AppError("AI service is currently busy. Please try again shortly.", code="ai_busy", status_code=503)
+            logger.exception(f"Unexpected error running assistant_agent: {e}")
+            raise AppError(f"AI Assistant error: {str(e)}", code="ai_error", status_code=500)
 
         # Build citations for seen messages
         citations: list[dict] = []

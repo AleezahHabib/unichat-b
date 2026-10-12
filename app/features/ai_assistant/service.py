@@ -59,6 +59,7 @@ class AIAssistantService:
                 message=f"AI assistant is busy. Please try again in {retry_after}s",
                 code="ai_busy",
                 status_code=503,
+                retry_after_seconds=retry_after,
             )
 
     async def _get_joined_channel_ids(self, db: AsyncSession, user_id: UUID, workspace_id: UUID) -> set[UUID]:

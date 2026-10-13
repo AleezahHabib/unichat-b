@@ -166,7 +166,8 @@ unichat/
 │       ├── 04-realtime/                  spec.md plan.md tasks.md
 │       ├── 05-integrations/              spec.md plan.md tasks.md
 │       ├── 06-ai-assistant/              spec.md plan.md tasks.md
-│       └── 07-landing-page/              spec.md plan.md tasks.md   # + evidence.md (Lighthouse)
+│       ├── 07-landing-page/              spec.md plan.md tasks.md   # + evidence.md (Lighthouse)
+│       └── 08-interactive-demo/          spec.md plan.md tasks.md
 │
 ├── database/
 │   ├── README.md                  # every table in plain English + "why one messages table"
@@ -246,7 +247,7 @@ unichat/
         │           ├── assistant/page.tsx  search/page.tsx
         │           └── settings/members/page.tsx  settings/integrations/page.tsx
         ├── features/
-        │   ├── landing/components/    # Navbar Hero HeroTabs SyncDemo PlatformStrip HowItWorks
+        │   ├── landing/components/    # Navbar Hero HeroTabs SyncDemo InteractiveDemo PlatformStrip HowItWorks
         │   │                          # FeatureGrid AssistantShowcase IntegrationsHub SpecFirst Faq FinalCta Footer
         │   ├── authentication/        # api.ts AuthProvider.tsx useAuth.ts components/{LoginForm,SignupForm}
         │   ├── workspaces-and-channels/ # api.ts components/{WorkspacePicker,ChannelList,CreateChannelModal,BrowseChannelsModal,InviteCard,MemberList,WorkspaceSettingsModal}
@@ -547,6 +548,12 @@ AC-06-06 no key→`ai_disabled`, budget exhausted→`ai_busy`+retry time.
 correctly by auth state · AC-07-02 hero tabs work by click+arrow keys ·
 AC-07-03 reduced motion shows a static frame · AC-07-04 theme persists on
 reload · AC-07-05 (manual) Lighthouse desktop ≥90 all 4 categories.
+
+**08 Interactive demo:** AC-08-01 section at #demo with gate overlay · AC-08-02
+5 steps reversible progression (Connect, Send, Receive, Ask, Verify) · AC-08-03
+measurement-based hotspot & tooltip · AC-08-04 end card with /signup CTA &
+replay · AC-08-05 16:10 laptop frame, responsive collapses (<900px, <760px,
+<560px), reduced motion.
 
 If a future change adds, removes, or changes the meaning of any AC, update
 this section as well as the owning feature's `spec.md` — they must always

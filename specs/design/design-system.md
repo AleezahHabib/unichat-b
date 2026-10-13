@@ -25,6 +25,9 @@ Inspired by cap.so's bright, airy, confident aesthetic:
 | `live` | `#16C79A` | `#2EE0AE` | Online presence, active socket indicator, synced status |
 | `danger` | `#E5484D` | `#FF6B6F` | Destructive actions, delete warnings, error alerts |
 | `sky-top` | `#DCE9FF` | `#0B1733` | Subtle hero top atmosphere gradient tint |
+| `bezel` | `#232C40` | `#232C40` | Laptop frame outer bezel gradient start |
+| `bezel-2` | `#121A2B` | `#121A2B` | Laptop frame inner bezel gradient end and notch |
+| `wall` | `linear-gradient(150deg, #D7E6FF, #F3F7FF 55%, #E9F0FF)` | `linear-gradient(150deg, #15223F, #0A1026 55%, #101A33)` | Product stage desktop background backdrop wall |
 
 ### Platform Identity Badges
 External source badges exclusively use their official brand colors with crisp white text:

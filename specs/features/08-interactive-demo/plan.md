@@ -10,10 +10,11 @@ Integrated into `frontend/src/app/(marketing)/page.tsx` between `<PlatformStrip 
 ### Component Structure
 1. **Outer Section & Frame (`#demo`)**:
    - Section header with Title "See it work" and Subline "Five clicks through a real workflow. No sign-up."
-   - `.fc-demo`: Overhang padding (`px-10` / `40px`), centering container.
-   - `.fc-lid`: Laptop top lid styled with `--bezel` and `--bezel-2` gradients, rounded corners.
-   - `.fc-screen`: 16:10 aspect ratio screen with `--wall` gradient backdrop.
-   - `.fc-base`: Laptop bottom hinge & base overhang with notch, hidden below 900px.
+   - Centering container: Downsized from 1040px to 800px max-width (`max-w-[800px] mx-auto px-6 max-[900px]:px-0`) with 24px (`px-6`) side gutters.
+   - Laptop lid: Styled with `--bezel` and `--bezel-2` gradients, lid radius `18px 18px 4px 4px` (`rounded-[18px_18px_4px_4px]`), p-2.5.
+   - Camera dot: Small webcam lens dot (w-1.5 h-1.5 rounded-full bg-black/70 border border-white/10) centered in the top bezel (`absolute top-1 left-1/2 -translate-x-1/2`).
+   - Laptop screen: 16:10 aspect ratio screen (`aspect-[16/10]`) with `--wall` gradient backdrop and 8px inner radius.
+   - Laptop base: Bottom hinge & base overhang (`h-[12px] -mx-6 rounded-[0_0_12px_12px]`) with notch and top highlight line; the `-mx-6` overhang precisely matches the container's `px-6` gutters to prevent horizontal scroll at all viewport widths (900px, 1000px, 1440px), hidden below 900px.
 
 2. **Stage & Product Mockup**:
    - **UniChat App Window**:

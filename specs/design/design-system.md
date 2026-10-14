@@ -59,10 +59,12 @@ External source badges exclusively use their official brand colors with crisp wh
 
 ## 5. Motion & Micro-Interactions
 - **Transitions**: `150ms` - `250ms` `ease-out` on user-triggered actions (button hovers, tab clicks, modal pops).
+- **Floating Pill Navbar**: Detaches at `scrollY >= 24px` into a centered floating capsule (max-width 880px, ~20px clear of the viewport top on desktop, ~16px on mobile, border-radius 999px, background `var(--surface)` at ~85% opacity with `12px` backdrop blur, 1px border in `var(--border)`, shadow `0 16px 36px -4px rgba(11,19,36,.12), 0 4px 12px -2px rgba(11,19,36,.08)` in light and deeper equivalent in dark `navbar-pill-floating`, compact height 52–54px, 16px gutter minimum on phone width) over 250ms ease-out using transform/margin without layout shift; returns to full page width with transparent background at `scrollY < 24px`.
 - **Signature Autonomous Animation**: Exactly **one** autonomous loop is permitted across the entire application: the **Hero Sync Demo Loop** showing a message flowing between Slack, FistaChat, and Discord with live AI citation.
 - **Accessibility & Reduced Motion**:
   - The hero sync demo strictly checks `prefers-reduced-motion`.
   - When reduced motion is requested, all animation frames stop, presenting a static, beautifully rendered final preview frame.
+  - Floating pill navbar state switches instantly (0ms) when `prefers-reduced-motion: reduce` is enabled.
 
 ---
 
@@ -80,7 +82,7 @@ External source badges exclusively use their official brand colors with crisp wh
 ## 7. Landing Page Section Architecture
 The marketing landing page renders these 12 sections in strict order:
 
-1. **Navbar**: Sleek glassmorphic bar featuring brand mark, links (Features, Integrations, Spec-First, FAQ), theme toggle, and Auth actions (Log in / Open App).
+1. **Navbar**: Floating pill navbar that detaches at `scrollY >= 24px` into a compact frosted capsule (880px max-width, ~20px/16px viewport top clearance, 999px radius, 85% surface opacity with 12px blur, 1px border, elevation shadow token), featuring brand mark, links (Features, Integrations, Assistant, FAQ), theme toggle, and Auth actions (Log in / Get started).
 2. **Announcement Pill**: Subtle, non-intrusive pill announcing open-spec release and Gemini 2.5 Flash intelligence.
 3. **Hero Section**: 
    - Powerful headline: *"Chat. Connect. Ask."*

@@ -11,10 +11,10 @@ Integrated into `frontend/src/app/(marketing)/page.tsx` between `<PlatformStrip 
 1. **Outer Section & Frame (`#demo`)**:
    - Section header with Title "See it work" and Subline "Five clicks through a real workflow. No sign-up."
    - Centering container: Downsized from 1040px to 800px max-width (`max-w-[800px] mx-auto px-6 max-[900px]:px-0`) with 24px (`px-6`) side gutters.
-   - Laptop lid: Styled with `--bezel` and `--bezel-2` gradients, lid radius `18px 18px 4px 4px` (`rounded-[18px_18px_4px_4px]`), p-2.5.
-   - Camera dot: Small webcam lens dot (w-1.5 h-1.5 rounded-full bg-black/70 border border-white/10) centered in the top bezel (`absolute top-1 left-1/2 -translate-x-1/2`).
-   - Laptop screen: 16:10 aspect ratio screen (`aspect-[16/10]`) with `--wall` gradient backdrop and 8px inner radius.
-   - Laptop base: Bottom hinge & base overhang (`h-[12px] -mx-6 rounded-[0_0_12px_12px]`) with notch and top highlight line; the `-mx-6` overhang precisely matches the container's `px-6` gutters to prevent horizontal scroll at all viewport widths (900px, 1000px, 1440px), hidden below 900px.
+   - Laptop lid: Styled with `--bezel` and `--bezel-2` gradients, lid radius `18px 18px 4px 4px` (`rounded-[18px_18px_4px_4px]`), `pt-3 px-3 pb-3.5` creating balanced top/side bezels and a 14px bottom chin.
+   - Camera dot: Small webcam lens dot (`w-1.5 h-1.5 rounded-full bg-black/70 border border-white/10`) centered in the top bezel (`absolute top-1.5 left-1/2 -translate-x-1/2`).
+   - Laptop screen: 16:10 aspect ratio screen (`aspect-[16/10]`) with `--wall` gradient backdrop, 8px inner radius, and `p-4 sm:p-5` padding ensuring floating cards never touch the bezels.
+   - Laptop base: Positioned directly below the lid with `-mx-4` chassis overhang (`h-[12px] -mx-4 rounded-[0_0_12px_12px]`), notch, and top highlight seam; fits cleanly within the container's `px-6` gutters to prevent horizontal scroll at all viewports (900px, 1000px, 1440px), hidden below 900px.
 
 2. **Stage & Product Mockup**:
    - **UniChat App Window**:

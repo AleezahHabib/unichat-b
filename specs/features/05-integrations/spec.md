@@ -24,7 +24,7 @@ Connect Slack and Discord to UniChat channels for seamless two-way message synch
 
 ### AC-05-04: Discord two-way sync & REST polling
 - Outbound: `unichat` messages are relayed to Discord webhook with `?wait=true`, `username="<Name> (via UniChat)"`, and `allowed_mentions:{parse:[]}`. Thread replies are prefixed with `↪ replying to <author>: "<first 60 chars>"`. Returns Discord message ID as `external_id`.
-- Inbound: Background poller runs every `DISCORD_POLL_SECONDS` (default 3s). Fetches `GET /channels/{id}/messages?after=<cursor>&limit=50` for each Discord link (oldest first). Maps `message_reference.message_id` to `parent_id`, resolves author name (`nick` -> `global_name` -> `username`), saves with `source='discord'`, publishes realtime WS event, and advances cursor. Respects HTTP 429 `retry_after`.
+- Inbound: Background poller runs every `DISCORD_POLL_SECONDS` (default 3s) using in-memory cached channel links (refreshed only when integrations connect/disconnect or channel links are created/removed). Hits Discord REST API (`GET /channels/{id}/messages?after=<cursor>&limit=50`) and never Postgres on idle polling ticks. Maps `message_reference.message_id` to `parent_id`, resolves author name (`nick` -> `global_name` -> `username`), saves with `source='discord'`, publishes realtime WS event, advances cursor, and writes to database only when new messages arrive. Respects HTTP 429 `retry_after`.
 
 ### AC-05-05: Three-layer echo prevention (Echo Guard)
 - Layer 1: Identity Filter — ignores messages sent by UniChat's own bot ID or webhook ID.

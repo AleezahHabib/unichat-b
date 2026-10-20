@@ -2,6 +2,7 @@ import asyncio
 import logging
 from uuid import UUID
 from sqlalchemy import select, text
+from app.core.config import settings
 from app.core.database import async_session
 from app.core.leader import is_leader
 from app.features.ai_assistant.embeddings import embed_documents, is_ai_enabled
@@ -71,10 +72,10 @@ async def embed_worker_loop() -> None:
 
 
 async def embedding_sweep_loop() -> None:
-    logger.info("Starting embedding sweep loop (60s interval)")
+    logger.info("Starting embedding sweep loop (%ds interval)", settings.EMBEDDING_SWEEP_SECONDS)
     while True:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(settings.EMBEDDING_SWEEP_SECONDS)
             if not is_ai_enabled():
                 continue
             if not is_leader():

@@ -36,6 +36,14 @@ from app.features.workspaces_and_channels.repository import workspace_repository
 logger = logging.getLogger(__name__)
 
 
+async def _trigger_cache_refresh() -> None:
+    try:
+        from app.background.sync_external import refresh_integrations_cache
+        await refresh_integrations_cache()
+    except Exception as e:
+        logger.warning("Could not refresh integrations cache: %s", e)
+
+
 class IntegrationService:
     async def start_slack_oauth(
         self, db: AsyncSession, redis: Redis, workspace_id: UUID, user_id: UUID
@@ -158,6 +166,7 @@ class IntegrationService:
             )
             logger.info("Created new Slack integration via OAuth for workspace %s (team_id=%s)", workspace_id, team_id)
 
+        await _trigger_cache_refresh()
         return f"{target_integrations_url}?slack=connected"
 
     async def connect_slack(
@@ -185,6 +194,7 @@ class IntegrationService:
             existing_platform.display_name = bot_meta["display_name"]
             await db.commit()
             await db.refresh(existing_platform)
+            await _trigger_cache_refresh()
             return ConnectedPlatformResponse.model_validate(existing_platform)
 
         cp = await integration_repository.create_platform(
@@ -195,6 +205,7 @@ class IntegrationService:
             bot_identity=bot_meta["bot_id"],
             display_name=bot_meta["display_name"],
         )
+        await _trigger_cache_refresh()
         return ConnectedPlatformResponse.model_validate(cp)
 
 
@@ -224,6 +235,7 @@ class IntegrationService:
             bot_identity=bot_meta["bot_id"],
             display_name=bot_meta["display_name"],
         )
+        await _trigger_cache_refresh()
         return ConnectedPlatformResponse.model_validate(cp)
 
     async def list_workspace_integrations(
@@ -256,6 +268,7 @@ class IntegrationService:
         if not platform:
             raise AppError("Integration not found", code="integration_not_found", status_code=404)
         await integration_repository.delete_platform(db, platform_id)
+        await _trigger_cache_refresh()
 
     async def list_external_channels(
         self, db: AsyncSession, platform_id: UUID
@@ -291,6 +304,7 @@ class IntegrationService:
                         updated = True
             if updated:
                 await db.commit()
+                await _trigger_cache_refresh()
 
         return live_channels
 
@@ -347,6 +361,7 @@ class IntegrationService:
                 current_platform_link.last_synced_external_id = last_synced_external_id
             await db.commit()
             await db.refresh(current_platform_link)
+            await _trigger_cache_refresh()
             return ChannelLinkResponse.model_validate(current_platform_link)
 
         link = await integration_repository.create_channel_link(
@@ -360,12 +375,14 @@ class IntegrationService:
             webhook_id=webhook_id,
             last_synced_external_id=last_synced_external_id,
         )
+        await _trigger_cache_refresh()
         return ChannelLinkResponse.model_validate(link)
 
     async def unlink_channel(
         self, db: AsyncSession, channel_id: UUID, platform: str
     ) -> None:
         await integration_repository.remove_channel_link(db, channel_id, platform)
+        await _trigger_cache_refresh()
 
     async def relay_outbound(
         self, db: AsyncSession, redis: Redis, message: Message, author_name: str

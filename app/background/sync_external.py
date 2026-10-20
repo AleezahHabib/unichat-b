@@ -27,9 +27,29 @@ from app.background.embed_worker import enqueue_message_embedding
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+from dataclasses import dataclass
+
 # Active Slack Socket Mode clients: platform_id -> (SocketModeClient, AsyncWebClient)
 _active_slack_clients: dict[UUID, tuple[SocketModeClient, AsyncWebClient, str]] = {}
 
+
+@dataclass
+class CachedDiscordLink:
+    id: UUID
+    channel_id: UUID
+    platform_id: UUID
+    workspace_id: UUID
+    external_channel_id: str
+    external_channel_name: str
+    last_synced_external_id: str | None
+    bot_token: str
+    bot_identity: str
+    webhook_id: str | None
+
+
+_cached_discord_links: list[CachedDiscordLink] = []
+_discord_cache_initialized: bool = False
+_cache_lock = asyncio.Lock()
 
 
 def get_background_status() -> str:
@@ -271,78 +291,138 @@ async def stop_slack_socket_mode_for_platform(platform_id: UUID) -> None:
             logger.warning("Error closing Slack client for platform %s: %s", platform_id, e)
 
 
+async def refresh_integrations_cache() -> None:
+    """
+    Refreshes the in-memory cache of Discord channel links and active Slack platforms.
+    Must be called at startup and only when an integration is connected/disconnected
+    or a channel link is created/removed.
+    """
+    global _cached_discord_links, _discord_cache_initialized
+    async with _cache_lock:
+        try:
+            async with async_session() as db:
+                # 1. Fetch connected Discord platforms
+                p_stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "discord")
+                platforms = {p.id: p for p in (await db.execute(p_stmt)).scalars().all()}
+
+                # 2. Fetch active Discord channel links with their workspace_id
+                stmt = (
+                    select(ChannelLink, Channel.workspace_id)
+                    .join(Channel, Channel.id == ChannelLink.channel_id)
+                    .where(ChannelLink.platform == "discord")
+                )
+                results = (await db.execute(stmt)).all()
+
+                cached: list[CachedDiscordLink] = []
+                for link, ws_id in results:
+                    platform = platforms.get(link.platform_id)
+                    if not platform:
+                        continue
+                    try:
+                        tokens = json.loads(decrypt_secret(platform.encrypted_tokens))
+                        bot_token = tokens.get("bot_token")
+                        if not bot_token:
+                            continue
+                    except Exception as e:
+                        logger.error("Error decrypting Discord tokens for platform %s: %s", platform.id, e)
+                        continue
+
+                    cached.append(
+                        CachedDiscordLink(
+                            id=link.id,
+                            channel_id=link.channel_id,
+                            platform_id=link.platform_id,
+                            workspace_id=ws_id,
+                            external_channel_id=link.external_channel_id,
+                            external_channel_name=link.external_channel_name or "discord",
+                            last_synced_external_id=link.last_synced_external_id,
+                            bot_token=bot_token,
+                            bot_identity=str(platform.bot_identity or ""),
+                            webhook_id=str(link.webhook_id or "") if link.webhook_id else None,
+                        )
+                    )
+
+                _cached_discord_links = cached
+                _discord_cache_initialized = True
+                logger.info("Refreshed Discord channel links cache: %d links cached", len(cached))
+
+                # Also sync Slack Socket Mode clients under leader lock
+                if is_leader():
+                    s_stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "slack")
+                    slack_platforms = (await db.execute(s_stmt)).scalars().all()
+                    current_db_ids = {p.id for p in slack_platforms}
+
+                    for pid in list(_active_slack_clients.keys()):
+                        if pid not in current_db_ids:
+                            await stop_slack_socket_mode_for_platform(pid)
+
+                    for platform in slack_platforms:
+                        if platform.id not in _active_slack_clients:
+                            await start_slack_socket_mode_for_platform(platform)
+        except Exception as e:
+            logger.error("Error refreshing integrations cache: %s", e)
+
+
 async def poll_discord_channels() -> None:
     """
     Polls active Discord channel links for new messages under leader lock.
-    Respects AC-05-04 and 3-layer Echo Guard.
+    Reads channel_links strictly from in-memory cache without hitting Postgres.
+    Only queries/writes Postgres when new messages are returned by Discord's API.
     """
-    try:
-        async with async_session() as db:
-            # 1. Fetch active Discord channel links
-            stmt = select(ChannelLink).where(ChannelLink.platform == "discord")
-            links = (await db.execute(stmt)).scalars().all()
-            if not links:
-                return
+    global _cached_discord_links, _discord_cache_initialized
+    if not _discord_cache_initialized:
+        await refresh_integrations_cache()
 
-            # 2. Fetch connected platforms for Discord
-            p_stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "discord")
-            platforms = {p.id: p for p in (await db.execute(p_stmt)).scalars().all()}
+    if not _cached_discord_links:
+        return
 
-            redis = get_redis_client()
+    redis = get_redis_client()
 
-            for link in links:
-                platform = platforms.get(link.platform_id)
-                if not platform:
-                    continue
+    for cached_link in list(_cached_discord_links):
+        adapter = DiscordAdapter(cached_link.bot_token)
 
-                try:
-                    tokens = json.loads(decrypt_secret(platform.encrypted_tokens))
-                    bot_token = tokens.get("bot_token")
-                    if not bot_token:
-                        continue
-                except Exception as e:
-                    logger.error("Error decrypting Discord tokens for platform %s: %s", platform.id, e)
-                    continue
-
-                adapter = DiscordAdapter(bot_token)
-
-                # Initialize cursor if not yet set
-                if not link.last_synced_external_id:
-                    try:
-                        init_msgs = await adapter.fetch_messages_after(link.external_channel_id, limit=1)
-                        if init_msgs:
-                            link.last_synced_external_id = str(init_msgs[-1]["id"])
+        # Initialize cursor if not yet set
+        if not cached_link.last_synced_external_id:
+            try:
+                init_msgs = await adapter.fetch_messages_after(cached_link.external_channel_id, limit=1)
+                if init_msgs:
+                    cursor_id = str(init_msgs[-1]["id"])
+                    cached_link.last_synced_external_id = cursor_id
+                    async with async_session() as db:
+                        stmt = select(ChannelLink).where(ChannelLink.id == cached_link.id)
+                        db_link = (await db.execute(stmt)).scalar_one_or_none()
+                        if db_link:
+                            db_link.last_synced_external_id = cursor_id
                             await db.commit()
-                            logger.info(
-                                "Initialized Discord cursor for channel %s to %s",
-                                link.external_channel_id,
-                                link.last_synced_external_id,
-                            )
-                        continue
-                    except Exception as e:
-                        logger.warning("Error initializing Discord cursor for channel %s: %s", link.external_channel_id, e)
-                        continue
+                    logger.info("Initialized Discord cursor for channel %s to %s", cached_link.external_channel_id, cursor_id)
+                continue
+            except Exception as e:
+                logger.warning("Error initializing Discord cursor for channel %s: %s", cached_link.external_channel_id, e)
+                continue
 
-                try:
-                    messages = await adapter.fetch_messages_after(
-                        link.external_channel_id,
-                        after_id=link.last_synced_external_id,
-                        limit=50,
-                    )
-                except Exception as e:
-                    logger.warning("Error fetching messages for Discord channel %s: %s", link.external_channel_id, e)
-                    continue
+        try:
+            messages = await adapter.fetch_messages_after(
+                cached_link.external_channel_id,
+                after_id=cached_link.last_synced_external_id,
+                limit=50,
+            )
+        except Exception as e:
+            logger.warning("Error fetching messages for Discord channel %s: %s", cached_link.external_channel_id, e)
+            continue
 
-                if not messages:
-                    continue
+        if not messages:
+            continue
 
+        # Real new messages received from Discord API — persist them in Postgres
+        try:
+            async with async_session() as db:
                 for msg in messages:
                     msg_id = str(msg["id"])
                     author = msg.get("author") or {}
                     author_id = str(author.get("id") or "")
                     webhook_id = str(msg.get("webhook_id") or "")
-                    own_bot_id = str(platform.bot_identity or "")
-                    own_webhook_id = str(link.webhook_id or "")
+                    own_bot_id = cached_link.bot_identity
+                    own_webhook_id = cached_link.webhook_id or ""
 
                     # Layer 1 Echo Guard: Identity Filter
                     if echo_guard.is_identity_echo(
@@ -352,15 +432,23 @@ async def poll_discord_channels() -> None:
                         own_webhook_id=own_webhook_id,
                     ) or (own_bot_id and author_id == own_bot_id) or (own_webhook_id and webhook_id == own_webhook_id):
                         logger.debug("Discord Layer 1 Echo Guard: Ignored own bot/webhook message %s", msg_id)
-                        link.last_synced_external_id = msg_id
-                        await db.commit()
+                        cached_link.last_synced_external_id = msg_id
+                        stmt = select(ChannelLink).where(ChannelLink.id == cached_link.id)
+                        db_link = (await db.execute(stmt)).scalar_one_or_none()
+                        if db_link:
+                            db_link.last_synced_external_id = msg_id
+                            await db.commit()
                         continue
 
                     # Layer 3 Echo Guard: Race Window Guard
                     if await echo_guard.is_race_window_echo(redis, msg_id):
                         logger.debug("Discord Layer 3 Echo Guard: Ignored race window echo %s", msg_id)
-                        link.last_synced_external_id = msg_id
-                        await db.commit()
+                        cached_link.last_synced_external_id = msg_id
+                        stmt = select(ChannelLink).where(ChannelLink.id == cached_link.id)
+                        db_link = (await db.execute(stmt)).scalar_one_or_none()
+                        if db_link:
+                            db_link.last_synced_external_id = msg_id
+                            await db.commit()
                         continue
 
                     # Resolve author name: nickname -> global_name -> username -> "Discord User"
@@ -377,41 +465,47 @@ async def poll_discord_channels() -> None:
                     ref_msg_id = (msg.get("message_reference") or {}).get("message_id")
                     if ref_msg_id:
                         parent_stmt = select(Message.id).where(
-                            Message.external_channel_id == link.external_channel_id,
+                            Message.external_channel_id == cached_link.external_channel_id,
                             Message.external_id == str(ref_msg_id),
                         )
                         parent_id = (await db.execute(parent_stmt)).scalar_one_or_none()
 
                     # Layer 2 Echo Guard: Database Unique Constraint Protection
                     new_msg = Message(
-                        channel_id=link.channel_id,
+                        channel_id=cached_link.channel_id,
                         author_id=None,
                         external_author_name=author_name,
                         body=msg.get("content", ""),
                         source="discord",
                         external_id=msg_id,
-                        external_channel_id=link.external_channel_id,
+                        external_channel_id=cached_link.external_channel_id,
                         parent_id=parent_id,
                         created_at=datetime.now(timezone.utc),
                     )
 
                     try:
                         db.add(new_msg)
-                        link.last_synced_external_id = msg_id
+                        stmt = select(ChannelLink).where(ChannelLink.id == cached_link.id)
+                        db_link = (await db.execute(stmt)).scalar_one_or_none()
+                        if db_link:
+                            db_link.last_synced_external_id = msg_id
+                        cached_link.last_synced_external_id = msg_id
                         await db.commit()
                         await db.refresh(new_msg)
                     except Exception as e:
                         # Duplicate caught by Layer 2 constraint
                         await db.rollback()
-                        link.last_synced_external_id = msg_id
-                        await db.commit()
+                        stmt = select(ChannelLink).where(ChannelLink.id == cached_link.id)
+                        db_link = (await db.execute(stmt)).scalar_one_or_none()
+                        if db_link:
+                            db_link.last_synced_external_id = msg_id
+                            await db.commit()
+                        cached_link.last_synced_external_id = msg_id
                         logger.debug("Discord Layer 2 Echo Guard: Duplicate message %s ignored (%s)", msg_id, e)
                         continue
 
-                    # Fetch workspace_id for realtime WS event
-                    ch_stmt = select(Channel.workspace_id).where(Channel.id == link.channel_id)
-                    workspace_id = (await db.execute(ch_stmt)).scalar_one_or_none()
-
+                    # Realtime broadcast using cached workspace_id
+                    workspace_id = cached_link.workspace_id
                     if workspace_id:
                         msg_payload = {
                             "id": str(new_msg.id),
@@ -433,16 +527,16 @@ async def poll_discord_channels() -> None:
                             "deleted_at": None,
                             "reply_count": 0,
                         }
-                        evt = message_created_event(str(workspace_id), str(link.channel_id), msg_payload)
+                        evt = message_created_event(str(workspace_id), str(cached_link.channel_id), msg_payload)
                         await publish_event(redis, str(workspace_id), evt)
 
-                        # AC-05-06 / Step 4: Cross-platform relay outbound (e.g. to Slack)
+                        # Relay outbound to other platforms (e.g. Slack)
                         await integration_service.relay_outbound(db, redis, new_msg, author_name)
 
                     # Enqueue for embedding
                     enqueue_message_embedding(
                         new_msg.id,
-                        link.external_channel_name or "discord",
+                        cached_link.external_channel_name,
                         author_name,
                         new_msg.body,
                     )
@@ -450,10 +544,10 @@ async def poll_discord_channels() -> None:
                         "Synced Discord message %s from %s into UniChat channel %s",
                         msg_id,
                         author_name,
-                        link.channel_id,
+                        cached_link.channel_id,
                     )
-    except Exception as e:
-        logger.error("Error in poll_discord_channels: %s", e, exc_info=True)
+        except Exception as e:
+            logger.error("Error processing Discord messages: %s", e, exc_info=True)
 
 
 async def sync_external_loop() -> None:
@@ -469,35 +563,23 @@ async def sync_external_loop() -> None:
             if current_leader != last_leader_state:
                 if current_leader:
                     logger.info("External sync loop acquired leader lock. Managing integrations (Slack Socket Mode + Discord poller).")
+                    await refresh_integrations_cache()
                 else:
                     logger.info("External sync loop lost leader lock or running as follower.")
+                    active_ids = list(_active_slack_clients.keys())
+                    for pid in active_ids:
+                        await stop_slack_socket_mode_for_platform(pid)
                 last_leader_state = current_leader
 
             if current_leader:
-                async with async_session() as db:
-                    # Fetch all connected Slack platforms
-                    stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "slack")
-                    platforms = (await db.execute(stmt)).scalars().all()
-                    current_db_ids = {p.id for p in platforms}
+                # Check for dead Slack socket connections in-memory without querying Postgres
+                for pid, (client, _, _) in list(_active_slack_clients.items()):
+                    if not await client.is_connected():
+                        logger.warning("Slack Socket Mode disconnected for platform %s. Refreshing to reconnect.", pid)
+                        await refresh_integrations_cache()
+                        break
 
-                    # Drop dead connections so they reconnect
-                    for pid, (client, _, _) in list(_active_slack_clients.items()):
-                        if not await client.is_connected():
-                            logger.warning("Slack Socket Mode disconnected for platform %s. Dropping to reconnect.", pid)
-                            await stop_slack_socket_mode_for_platform(pid)
-
-                    # Start any new platforms not yet connected
-                    for platform in platforms:
-                        if platform.id not in _active_slack_clients:
-                            await start_slack_socket_mode_for_platform(platform)
-
-                    # Stop any removed platforms
-                    active_ids = list(_active_slack_clients.keys())
-                    for pid in active_ids:
-                        if pid not in current_db_ids:
-                            await stop_slack_socket_mode_for_platform(pid)
-
-                # Poll Discord channels on each tick under leader lock
+                # Poll Discord channels on each tick under leader lock (hits Discord API only, never Postgres)
                 await poll_discord_channels()
             else:
                 # If follower or lost leadership, close all active listeners

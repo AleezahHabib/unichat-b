@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     ENABLE_BACKGROUND: bool = True
     DISCORD_POLL_SECONDS: int = 3
+    EMBEDDING_SWEEP_SECONDS: int = 900
     LOG_LEVEL: str = "INFO"
     SLACK_CLIENT_ID: str = ""
     SLACK_CLIENT_SECRET: str = ""

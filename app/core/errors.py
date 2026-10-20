@@ -21,7 +21,17 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     payload = {"detail": exc.message, "code": exc.code}
     if exc.retry_after_seconds is not None:
         payload["retry_after_seconds"] = exc.retry_after_seconds
+    headers = {}
+    origin = request.headers.get("origin")
+    if origin:
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
     return JSONResponse(
         status_code=exc.status_code,
         content=payload,
+        headers=headers,
     )

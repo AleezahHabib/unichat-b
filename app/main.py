@@ -62,12 +62,26 @@ from fastapi.responses import JSONResponse
 app.add_exception_handler(AppError, app_error_handler)
 
 
+def _cors_headers_for_request(request: Request) -> dict[str, str]:
+    origin = request.headers.get("origin")
+    if not origin:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+    }
+
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unhandled server exception at %s: %s", request.url.path, exc, exc_info=True)
+    headers = _cors_headers_for_request(request)
     return JSONResponse(
         status_code=500,
         content={"detail": "An unexpected internal server error occurred", "code": "internal_error"},
+        headers=headers,
     )
 
 app.include_router(auth_router)
@@ -91,16 +105,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_last_db_healthy: bool = True
+
 
 @app.get("/health")
-async def health_check() -> dict[str, Any]:
-    db_ok = False
-    try:
-        async with engine.connect() as conn:
-            result = await conn.execute(text("SELECT 1;"))
-            db_ok = result.scalar() == 1
-    except Exception:
-        db_ok = False
+async def health_check(check_db: bool = False) -> dict[str, Any]:
+    global _last_db_healthy
+    if check_db:
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text("SELECT 1;"))
+                _last_db_healthy = result.scalar() == 1
+        except Exception:
+            _last_db_healthy = False
+
+    db_ok = bool(settings.DATABASE_URL) and _last_db_healthy
 
     redis_ok = False
     try:

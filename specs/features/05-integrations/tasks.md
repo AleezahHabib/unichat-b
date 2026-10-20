@@ -22,4 +22,5 @@
 - [x] Update frontend Integrations page with "Add to Slack" button and status handling
 - [x] Add tests in `tests/test_integrations.py` for AC-05-09 and AC-05-10
 - [x] Update `specs/api/openapi.yaml`, `AGENTS.md`, and regenerate frontend types
+- [x] Cache Discord channel links in memory to eliminate recurring Postgres queries on idle polling ticks
 

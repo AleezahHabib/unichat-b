@@ -33,3 +33,7 @@ Grounded AI intelligence powered exclusively by Google Gemini via the OpenAI Age
 - AI endpoints rate limited to max 10 requests/min/user (returns 429 `rate_limited`).
 - If `GEMINI_API_KEY` is empty, AI endpoints return 503 `ai_disabled`.
 - If Gemini API budget/quota is exceeded, returns 503 `ai_busy` with `retry_after_seconds`.
+
+### AC-06-06: Message embedding queue and sweep worker
+- New messages are enqueued on an in-process queue and embedded immediately upon creation.
+- A background embedding sweep runs under leader lock every `EMBEDDING_SWEEP_SECONDS` (default 900s = 15 minutes) as a safety net for server restarts and seed data.

@@ -6,6 +6,14 @@ from app.features.integrations.models import ChannelLink, ConnectedPlatform
 from app.features.messaging.models import Message
 
 
+def _invalidate_cache() -> None:
+    try:
+        from app.background.sync_external import invalidate_integrations_cache
+        invalidate_integrations_cache()
+    except Exception:
+        pass
+
+
 class IntegrationRepository:
     async def create_platform(
         self,
@@ -26,6 +34,7 @@ class IntegrationRepository:
         db.add(cp)
         await db.commit()
         await db.refresh(cp)
+        _invalidate_cache()
         return cp
 
     async def get_platform(self, db: AsyncSession, platform_id: UUID) -> ConnectedPlatform | None:
@@ -55,6 +64,7 @@ class IntegrationRepository:
         stmt = delete(ConnectedPlatform).where(ConnectedPlatform.id == platform_id)
         await db.execute(stmt)
         await db.commit()
+        _invalidate_cache()
 
     async def create_channel_link(
         self,
@@ -81,6 +91,7 @@ class IntegrationRepository:
         db.add(link)
         await db.commit()
         await db.refresh(link)
+        _invalidate_cache()
         return link
 
     async def get_channel_links(self, db: AsyncSession, channel_id: UUID) -> list[ChannelLink]:
@@ -113,6 +124,7 @@ class IntegrationRepository:
         )
         await db.execute(stmt)
         await db.commit()
+        _invalidate_cache()
 
 
 

@@ -38,10 +38,15 @@ logger = logging.getLogger(__name__)
 
 async def _trigger_cache_refresh() -> None:
     try:
-        from app.background.sync_external import refresh_integrations_cache
-        await refresh_integrations_cache()
+        from app.background.sync_external import invalidate_integrations_cache, refresh_integrations_cache
+        invalidate_integrations_cache()
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(refresh_integrations_cache())
+        except RuntimeError:
+            pass
     except Exception as e:
-        logger.warning("Could not refresh integrations cache: %s", e)
+        logger.warning("Could not trigger integrations cache refresh: %s", e)
 
 
 class IntegrationService:
@@ -226,6 +231,16 @@ class IntegrationService:
 
         tokens_json = json.dumps({"bot_token": req.bot_token})
         encrypted_tokens = encrypt_secret(tokens_json)
+
+        existing_platform = await integration_repository.get_workspace_platform(db, req.workspace_id, "discord")
+        if existing_platform:
+            existing_platform.encrypted_tokens = encrypted_tokens
+            existing_platform.bot_identity = bot_meta["bot_id"]
+            existing_platform.display_name = bot_meta["display_name"]
+            await db.commit()
+            await db.refresh(existing_platform)
+            await _trigger_cache_refresh()
+            return ConnectedPlatformResponse.model_validate(existing_platform)
 
         cp = await integration_repository.create_platform(
             db,

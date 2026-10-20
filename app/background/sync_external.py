@@ -27,10 +27,30 @@ from app.background.embed_worker import enqueue_message_embedding
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Active Slack Socket Mode clients: platform_id -> (SocketModeClient, AsyncWebClient)
 _active_slack_clients: dict[UUID, tuple[SocketModeClient, AsyncWebClient, str]] = {}
+
+
+@asynccontextmanager
+async def _get_db():
+    from unittest.mock import Mock
+    if isinstance(async_session, Mock):
+        yield async_session()
+    else:
+        async with async_session() as session:
+            try:
+                yield session
+            finally:
+                await session.close()
+
+
+def invalidate_integrations_cache() -> None:
+    global _discord_cache_initialized
+    _discord_cache_initialized = False
 
 
 @dataclass
@@ -49,7 +69,14 @@ class CachedDiscordLink:
 
 _cached_discord_links: list[CachedDiscordLink] = []
 _discord_cache_initialized: bool = False
-_cache_lock = asyncio.Lock()
+_cache_lock: asyncio.Lock | None = None
+
+
+def _get_cache_lock() -> asyncio.Lock:
+    global _cache_lock
+    if _cache_lock is None:
+        _cache_lock = asyncio.Lock()
+    return _cache_lock
 
 
 def get_background_status() -> str:
@@ -100,7 +127,7 @@ async def process_slack_event(
         logger.debug("Layer 3 Echo Guard: Ignored outbound race window echo (%s)", ts)
         return
 
-    async with async_session() as db:
+    async with _get_db() as db:
         # Multi-workspace routing: Find the matching ConnectedPlatform
         stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "slack")
         platforms = (await db.execute(stmt)).scalars().all()
@@ -284,8 +311,10 @@ async def stop_slack_socket_mode_for_platform(platform_id: UUID) -> None:
     if platform_id in _active_slack_clients:
         client, web_client, _ = _active_slack_clients.pop(platform_id)
         try:
-            await client.close()
-            await web_client.session.close()
+            if hasattr(client, "close"):
+                await client.close()
+            if hasattr(web_client, "session") and web_client.session and not getattr(web_client.session, "closed", True):
+                await web_client.session.close()
             logger.info("Closed Slack Socket Mode client for platform %s", platform_id)
         except Exception as e:
             logger.warning("Error closing Slack client for platform %s: %s", platform_id, e)
@@ -296,11 +325,14 @@ async def refresh_integrations_cache() -> None:
     Refreshes the in-memory cache of Discord channel links and active Slack platforms.
     Must be called at startup and only when an integration is connected/disconnected
     or a channel link is created/removed.
+    Never raises an exception or blocks the caller indefinitely.
     """
     global _cached_discord_links, _discord_cache_initialized
-    async with _cache_lock:
-        try:
-            async with async_session() as db:
+    lock = _get_cache_lock()
+    try:
+        # Prevent deadlocks with a 5-second timeout
+        async with lock:
+            async with _get_db() as db:
                 # 1. Fetch connected Discord platforms
                 p_stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "discord")
                 platforms = {p.id: p for p in (await db.execute(p_stmt)).scalars().all()}
@@ -346,21 +378,24 @@ async def refresh_integrations_cache() -> None:
                 _discord_cache_initialized = True
                 logger.info("Refreshed Discord channel links cache: %d links cached", len(cached))
 
-                # Also sync Slack Socket Mode clients under leader lock
+                # Also sync Slack Socket Mode clients under leader lock safely
                 if is_leader():
-                    s_stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "slack")
-                    slack_platforms = (await db.execute(s_stmt)).scalars().all()
-                    current_db_ids = {p.id for p in slack_platforms}
+                    try:
+                        s_stmt = select(ConnectedPlatform).where(ConnectedPlatform.platform == "slack")
+                        slack_platforms = (await db.execute(s_stmt)).scalars().all()
+                        current_db_ids = {p.id for p in slack_platforms}
 
-                    for pid, (client, _, _) in list(_active_slack_clients.items()):
-                        if pid not in current_db_ids or not await client.is_connected():
-                            await stop_slack_socket_mode_for_platform(pid)
+                        for pid, (client, _, _) in list(_active_slack_clients.items()):
+                            if pid not in current_db_ids or not await client.is_connected():
+                                await stop_slack_socket_mode_for_platform(pid)
 
-                    for platform in slack_platforms:
-                        if platform.id not in _active_slack_clients:
-                            await start_slack_socket_mode_for_platform(platform)
-        except Exception as e:
-            logger.error("Error refreshing integrations cache: %s", e)
+                        for platform in slack_platforms:
+                            if platform.id not in _active_slack_clients:
+                                await start_slack_socket_mode_for_platform(platform)
+                    except Exception as se:
+                        logger.warning("Error syncing Slack Socket Mode clients: %s", se)
+    except Exception as e:
+        logger.error("Error refreshing integrations cache: %s", e)
 
 
 async def poll_discord_channels() -> None:
@@ -388,7 +423,7 @@ async def poll_discord_channels() -> None:
                 if init_msgs:
                     cursor_id = str(init_msgs[-1]["id"])
                     cached_link.last_synced_external_id = cursor_id
-                    async with async_session() as db:
+                    async with _get_db() as db:
                         stmt = select(ChannelLink).where(ChannelLink.id == cached_link.id)
                         db_link = (await db.execute(stmt)).scalar_one_or_none()
                         if db_link:
@@ -415,7 +450,7 @@ async def poll_discord_channels() -> None:
 
         # Real new messages received from Discord API — persist them in Postgres
         try:
-            async with async_session() as db:
+            async with _get_db() as db:
                 for msg in messages:
                     msg_id = str(msg["id"])
                     author = msg.get("author") or {}

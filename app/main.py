@@ -105,21 +105,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_last_db_healthy: bool = True
-
-
 @app.get("/health")
 async def health_check(check_db: bool = False) -> dict[str, Any]:
-    global _last_db_healthy
     if check_db:
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(text("SELECT 1;"))
-                _last_db_healthy = result.scalar() == 1
+                db_status: bool | str = result.scalar() == 1
         except Exception:
-            _last_db_healthy = False
-
-    db_ok = bool(settings.DATABASE_URL) and _last_db_healthy
+            db_status = False
+    else:
+        db_status = "not_checked"
 
     redis_ok = False
     try:
@@ -133,7 +129,7 @@ async def health_check(check_db: bool = False) -> dict[str, Any]:
 
     return {
         "status": "ok",
-        "database": db_ok,
+        "database": db_status,
         "redis": redis_ok,
         "ai": ai_status,
         "background": get_background_status(),

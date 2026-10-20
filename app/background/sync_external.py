@@ -352,8 +352,8 @@ async def refresh_integrations_cache() -> None:
                     slack_platforms = (await db.execute(s_stmt)).scalars().all()
                     current_db_ids = {p.id for p in slack_platforms}
 
-                    for pid in list(_active_slack_clients.keys()):
-                        if pid not in current_db_ids:
+                    for pid, (client, _, _) in list(_active_slack_clients.items()):
+                        if pid not in current_db_ids or not await client.is_connected():
                             await stop_slack_socket_mode_for_platform(pid)
 
                     for platform in slack_platforms:
@@ -576,6 +576,7 @@ async def sync_external_loop() -> None:
                 for pid, (client, _, _) in list(_active_slack_clients.items()):
                     if not await client.is_connected():
                         logger.warning("Slack Socket Mode disconnected for platform %s. Refreshing to reconnect.", pid)
+                        await stop_slack_socket_mode_for_platform(pid)
                         await refresh_integrations_cache()
                         break
 
